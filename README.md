@@ -7,20 +7,20 @@ Mods for [Claude Code](https://claude.com/claude-code): small plugins of functio
 Add this repository as a marketplace, once:
 
 ```
-/plugin marketplace add MarcoCarnevali/claude-code-mods
+/plugin marketplace add aJanzen33/claude-code-mods
 ```
 
 Then install any mod from the list below by its name, and reload:
 
 ```
-/plugin install <mod>@marco-mods
+/plugin install <mod>@marco-mods-aja-fork
 /reload-plugins
 ```
 
 To get new mods and updates later:
 
 ```
-/plugin marketplace update marco-mods
+/plugin marketplace update marco-mods-aja-fork
 ```
 
 A mod is code that runs inside Claude Code on your machine, with the same access Claude Code has. Read a mod's source before you install it.
@@ -39,7 +39,7 @@ A mod is code that runs inside Claude Code on your machine, with the same access
 A side pane listing a repository's GitHub issues as cards, with tabs, search, a label filter and linked pull requests. `/issues` opens it on the repository of the folder you started Claude Code in, or a picker of your repositories outside one. **Work on it** sends Claude a prompt to take on an issue. Needs the [GitHub CLI](https://cli.github.com), signed in.
 
 ```
-/plugin install github-issues@marco-mods
+/plugin install github-issues@marco-mods-aja-fork
 ```
 
 [Read more](./github-issues/README.md) · [Watch the demo](https://x.com/marcocarne_/status/2107456270873796697)
@@ -51,7 +51,7 @@ A side pane listing a repository's GitHub issues as cards, with tabs, search, a 
 A To do / Doing / Done board in a side pane. Claude's to-do list and the plans you approve fill it as Claude works, you add your own cards, and Claude has a board tool to add, move and remove cards when you ask. **Work on it** hands a card to Claude. `/board` opens it.
 
 ```
-/plugin install task-board@marco-mods
+/plugin install task-board@marco-mods-aja-fork
 ```
 
 [Read more](./task-board/README.md)

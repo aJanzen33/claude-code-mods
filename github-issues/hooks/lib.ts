@@ -576,6 +576,25 @@ export function isSameRepo(session: string | null, target: string): boolean {
   return (session.split('/')[1] ?? '').toLowerCase() === (target.split('/')[1] ?? '').toLowerCase()
 }
 
+/**
+ * The slash commands the `commands` setting names, in its order: split on
+ * commas and spaces, a leading slash dropped, repeats and names a command
+ * can't have left out.
+ */
+export function issueCommands(setting: string): string[] {
+  const names = setting
+    .split(/[\s,]+/)
+    .map(name => name.replace(/^\//, ''))
+    .filter(name => /^[A-Za-z0-9_:-]+$/.test(name))
+
+  return [...new Set(names)]
+}
+
+/** What an issue command runs with: the issue's number and its URL, so the skill can read it. */
+export function issueArgs(issue: Pick<Issue, 'number' | 'url'>): string {
+  return `#${issue.number} ${issue.url}`
+}
+
 /** The prompt "Work on it" submits. */
 export function workPrompt(repo: string, issue: Pick<Issue, 'number' | 'title' | 'url'>): string {
   return [

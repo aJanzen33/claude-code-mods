@@ -1,11 +1,11 @@
 {
-  "name": "marco-mods",
+  "name": "marco-mods-aja-fork",
   "owner": {
-    "name": "Marco Carnevali",
-    "url": "https://github.com/MarcoCarnevali"
+    "name": "Artur Janzen",
+    "url": "https://github.com/aJanzen33"
   },
   "metadata": {
-    "description": "Mods for Claude Code: panes, bands and hooks that run inside the terminal and the desktop app",
+    "description": "Reviewed fork of Marco Carnevali's mods for Claude Code: panes, bands and hooks that run inside the terminal and the desktop app",
     "version": "0.1.0"
   },
   "plugins": [
@@ -13,7 +13,7 @@
       "name": "github-issues",
       "source": "./github-issues",
       "description": "A side pane listing the repository's GitHub issues, with one click to have Claude work on one",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "category": "productivity",
       "keywords": ["mod", "github", "issues", "pane"]
     },

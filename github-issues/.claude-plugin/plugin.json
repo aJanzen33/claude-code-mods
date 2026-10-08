@@ -1,10 +1,18 @@
 {
   "name": "github-issues",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A side pane listing the repository's GitHub issues, with one click to have Claude work on one",
   "author": { "name": "Marco Carnevali", "url": "https://github.com/MarcoCarnevali" },
   "repository": "https://github.com/MarcoCarnevali/claude-code-mods",
   "license": "MIT",
   "keywords": ["mod", "github", "issues", "pane"],
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "commands": {
+      "type": "string",
+      "title": "Issue commands",
+      "description": "Slash commands each issue card offers, comma-separated; a press runs /<command> #<number> <url>. Empty: the card's Work on it button.",
+      "default": "implement, wayfinder"
+    }
+  }
 }

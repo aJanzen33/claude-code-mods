@@ -66,8 +66,8 @@ export type RepoPicker = {
   here: string | null
 }
 
-/** The issue handed to Claude: queued until Claude's turn on it starts, then working. */
-export type ActiveIssue = { number: number; state: 'queued' | 'working' }
+/** The issue handed to Claude: queued until Claude's turn on it starts, then working; `command` when a slash command took it. */
+export type ActiveIssue = { number: number; state: 'queued' | 'working'; command?: string }
 
 /** The issue whose details are open, and its details once loaded. */
 export type OpenIssue = { number: number; detail: IssueDetail | null }

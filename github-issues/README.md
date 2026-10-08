@@ -30,6 +30,10 @@ The pane shows the 40 most recently updated issues that match. A spinner shows w
 
 In the picker, repositories are grouped by owner. Type in the filter box to narrow the list. Enter opens the first match, or any `owner/name` you type. **Switch repo** in the pane goes back to the picker. If the session isn't in a GitHub repository, the pane opens on the picker.
 
+## Issue commands
+
+Each card offers the slash commands set in **Issue commands** (`github-issues.commands` in `/config`), `/implement` and `/wayfinder` by default. A press runs `/<command> #<number> <url>` in this session, once it is idle, and the button shows `◷` while queued and `●` once it runs. Any slash command or skill works, e.g. `implement, wayfinder, mattpocock-skills:tdd`. Leave the setting empty for the card's original **Work on it** button.
+
 ## Assignment alerts
 
 While the pane is open, the mod checks every two minutes which open issues are assigned to you in the repository it's watching: the one you picked, or the session's own. With the pane closed it makes no requests. The first check of a repository is silent and only records the current issues. After that, each newly assigned issue raises a toast. The issue numbers already seen are kept in Claude Code's plugin store, so alerts carry over between sessions.
@@ -41,7 +45,7 @@ The [GitHub CLI](https://cli.github.com) (`gh`), signed in with `gh auth login`.
 ## Install
 
 ```
-/plugin marketplace add MarcoCarnevali/claude-code-mods
-/plugin install github-issues@marco-mods
+/plugin marketplace add aJanzen33/claude-code-mods
+/plugin install github-issues@marco-mods-aja-fork
 /reload-plugins
 ```

@@ -24,6 +24,8 @@ import {
   fitCards,
   isRepoName,
   isSameRepo,
+  issueArgs,
+  issueCommands,
   issuesArgs,
   labelDot,
   labelOptions,
@@ -422,14 +424,16 @@ async function loadDetail($: EngineInterface, number: number): Promise<void> {
  * prompt once the session is idle, so while a turn runs it waits, and the
  * card says Queued until Claude's turn on it begins. Not sent, with a toast
  * saying why, when the session works in another repository, or when the
- * issue was already handed over.
+ * issue was already handed over. With `command`, the issue goes to that
+ * slash command (`/implement #42 <url>`) in place of the prompt.
  */
-async function workOn($: EngineInterface, issue: Issue): Promise<void> {
+async function workOn($: EngineInterface, issue: Issue, command?: string): Promise<void> {
   const target = (await read($, page)).repo
   if (target === null) return
   const current = await read($, active)
   if (current?.number === issue.number) {
-    $.ui.toast(current.state === 'queued' ? `#${issue.number} is already queued for Claude.` : `Claude is already on #${issue.number}.`)
+    const what = current.command === undefined ? 'Claude' : `/${current.command}`
+    $.ui.toast(current.state === 'queued' ? `#${issue.number} is already queued for ${what}.` : `${what} is already on #${issue.number}.`)
     return
   }
   const session = await detectRepo($)
@@ -441,14 +445,20 @@ async function workOn($: EngineInterface, issue: Issue): Promise<void> {
     return
   }
 
-  await setActive($, { number: issue.number, state: 'queued' })
+  await setActive($, { number: issue.number, state: 'queued', command })
   let outcome: 'started' | 'dropped' | undefined
-  const submitted = $.prompt.submit({ text: workPrompt(target, issue) }).then(
-    result => {
-      outcome = result.drop === undefined ? 'started' : 'dropped'
+  let why = ''
+  const handed =
+    command === undefined
+      ? $.prompt.submit({ text: workPrompt(target, issue) }).then(result => result.drop === undefined)
+      : $.command.run({ command, args: issueArgs(issue) }).then(() => true)
+  const submitted = handed.then(
+    started => {
+      outcome = started ? 'started' : 'dropped'
     },
-    () => {
+    (error: unknown) => {
       outcome = 'dropped'
+      why = error instanceof Error ? error.message : ''
     },
   )
   await Promise.race([submitted, $.clock.sleep(500)])
@@ -459,13 +469,15 @@ async function workOn($: EngineInterface, issue: Issue): Promise<void> {
   if ((await read($, active))?.number !== issue.number) return
   if (outcome === 'dropped') {
     await setActive($, null)
-    $.ui.toast(`#${issue.number} was not handed to Claude.`)
+    $.ui.toast(`#${issue.number} was not handed to ${command === undefined ? 'Claude' : `/${command}`}.${why === '' ? '' : ` ${why}`}`)
     return
   }
-  await setActive($, { number: issue.number, state: 'working' })
+  await setActive($, { number: issue.number, state: 'working', command })
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const commands = issueCommands(typeof options.commands === 'string' ? options.commands : '')
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'issues',
@@ -784,12 +796,27 @@ export const register: Register = on => {
             </Box>
           )}
           <Box flexDirection="row" columnGap={3} marginTop={1}>
-            <Button
-              key={`work:${issue.number}`}
-              label={handed === 'queued' ? '◷ Queued' : handed === 'working' ? '● Working on it' : 'Work on it'}
-              plain
-              onPress={() => void workOn($, issue)}
-            />
+            {commands.length === 0 ? (
+              <Button
+                key={`work:${issue.number}`}
+                label={handed === 'queued' ? '◷ Queued' : handed === 'working' ? '● Working on it' : 'Work on it'}
+                plain
+                onPress={() => void workOn($, issue)}
+              />
+            ) : (
+              commands.map(command => {
+                const mine = working?.command === command ? handed : null
+
+                return (
+                  <Button
+                    key={`run:${command}:${issue.number}`}
+                    label={mine === 'queued' ? `◷ /${command}` : mine === 'working' ? `● /${command}` : `/${command}`}
+                    plain
+                    onPress={() => void workOn($, issue, command)}
+                  />
+                )
+              })
+            )}
             <Button
               key={`details:${issue.number}`}
               label={isOpenHere ? 'Hide details' : 'Details'}

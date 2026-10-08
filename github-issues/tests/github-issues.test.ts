@@ -11,6 +11,8 @@ import {
   excerpt,
   fitCards,
   isSameRepo,
+  issueArgs,
+  issueCommands,
   issuesArgs,
   labelDot,
   labelInk,
@@ -32,6 +34,8 @@ import {
 
 const NOW = Date.parse('2026-10-06T10:00:00Z')
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
+// The card's own Work on it button shows only with no issue commands set.
+const NO_COMMANDS = { options: { commands: '' } }
 
 const TITLES: Record<number, string> = { 42: 'Crash on launch', 7: 'Dark mode' }
 
@@ -231,7 +235,7 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
 }
 
 describe('issues', () => {
-  test('cards show title, number, assignee, age, comments, linked PR and labels on every surface', async ($, on) => {
+  test('cards show title, number, assignee, age, comments, linked PR and labels on every surface', NO_COMMANDS, async ($, on) => {
     fakeGitHub(on)
     const opened = await slashIssues($, '.')
     expect(opened.text).toBe('Showing acme/widgets issues.')
@@ -284,7 +288,7 @@ describe('issues', () => {
     }
   })
 
-  test('Work on it submits a prompt naming the issue and marks its card', async ($, on) => {
+  test('Work on it submits a prompt naming the issue and marks its card', NO_COMMANDS, async ($, on) => {
     fakeGitHub(on)
     const submitted: string[] = []
     on('prompt.submit', ($, e) => {
@@ -306,7 +310,7 @@ describe('issues', () => {
     expect((await ui.find({ key: 'issue:7' }))?.props).toMatchObject({ borderColor: '#8c959f' })
   })
 
-  test('Work on it while Claude is busy shows Queued until the turn starts, and a second tap sends nothing', async ($, on) => {
+  test('Work on it while Claude is busy shows Queued until the turn starts, and a second tap sends nothing', NO_COMMANDS, async ($, on) => {
     const fake = fakeGitHub(on)
     const submitted: string[] = []
     let start = () => {}
@@ -337,7 +341,7 @@ describe('issues', () => {
     expect(fake.toasts.at(-1)).toBe('Claude is already on #42.')
   })
 
-  test('Work on it in a session of another repository sends nothing and says why', async ($, on) => {
+  test('Work on it in a session of another repository sends nothing and says why', NO_COMMANDS, async ($, on) => {
     const fake = fakeGitHub(on)
     const submitted: string[] = []
     on('prompt.submit', ($, e) => {
@@ -512,6 +516,44 @@ describe('issues', () => {
 
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^HTTP 401: Bad credentials$/ })).toBeDefined()
+  })
+})
+
+describe('issue commands', () => {
+  test('each card offers the set commands; a press runs one with the issue and marks it', async ($, on) => {
+    fakeGitHub(on)
+    const ran: string[] = []
+    on('command.run', ($, e, next) => {
+      if (e.command === 'issues') return next(e)
+      ran.push(`/${e.command} ${e.args}`)
+
+      return { text: '' }
+    })
+    await slashIssues($, '.')
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(await ui.find({ key: 'work:42' })).toBeUndefined()
+    expect((await ui.find({ key: 'run:implement:42' }))?.text).toBe('/implement')
+    expect((await ui.find({ key: 'run:wayfinder:42' }))?.text).toBe('/wayfinder')
+
+    await ui.press({ key: 'run:wayfinder:42' })
+    expect(ran).toEqual(['/wayfinder #42 https://github.com/acme/widgets/issues/42'])
+    expect((await ui.find({ key: 'run:wayfinder:42' }))?.text).toBe('● /wayfinder')
+    expect((await ui.find({ key: 'run:implement:42' }))?.text).toBe('/implement')
+
+    await ui.press({ key: 'run:implement:42' })
+    expect(ran).toHaveLength(1)
+  })
+
+  test('an unknown command hands nothing over and says why', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+
+    // Nothing answers /implement here, so the run rejects as for a command the session lacks.
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await ui.press({ key: 'run:implement:42' })
+    expect(fake.toasts.at(-1)).toMatch(/^#42 was not handed to \/implement\. ./)
+    expect((await ui.find({ key: 'run:implement:42' }))?.text).toBe('/implement')
   })
 })
 
@@ -831,5 +873,12 @@ describe('lib', () => {
     expect(workPrompt('a/b', { number: 3, title: 'T', url: 'https://github.com/a/b/issues/3' })).toContain(
       'Reference #3',
     )
+  })
+
+  test('issueCommands reads the setting; issueArgs names the issue', () => {
+    expect(issueCommands('implement, wayfinder')).toEqual(['implement', 'wayfinder'])
+    expect(issueCommands(' /implement,,implement  mattpocock-skills:tdd bad!name')).toEqual(['implement', 'mattpocock-skills:tdd'])
+    expect(issueCommands('')).toEqual([])
+    expect(issueArgs({ number: 3, url: 'https://github.com/a/b/issues/3' })).toBe('#3 https://github.com/a/b/issues/3')
   })
 })
