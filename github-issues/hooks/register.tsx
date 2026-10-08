@@ -53,8 +53,9 @@ const PANE = 'github-issues'
 const TITLE = 'Issues'
 const REFRESH_MS = 2 * 60_000
 const GH_PATHS = ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
-// Mid-gray: a card's edge that reads on a light pane and on a dark one.
-const CARD_BORDER = '#8c959f'
+// GitHub's open and closed issue colors; both read on a light pane and on a dark one.
+const OPEN_COLOR = '#3fb950'
+const CLOSED_COLOR = '#a371f7'
 
 const EMPTY_PAGE: IssuesPane = {
   repo: null,
@@ -698,7 +699,7 @@ export const register: Register = (on, options) => {
             <Button key="refresh" label="Refresh" plain onPress={() => void rescope($, {})} />
           </Box>
         </Box>
-        <Box flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
           {FILTERS.map(one => (
             <Button
               key={`filter:${one.id}`}
@@ -709,7 +710,7 @@ export const register: Register = (on, options) => {
           ))}
         </Box>
         {(Input !== undefined || Select !== undefined) && (
-          <Box flexDirection="column" marginTop={1} rowGap={1}>
+          <Box flexDirection="column">
             {Input !== undefined && (
               <Input
                 key="issue-search"
@@ -731,7 +732,7 @@ export const register: Register = (on, options) => {
             )}
           </Box>
         )}
-        <Box flexDirection="row" flexWrap="wrap" columnGap={2} marginTop={1}>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
           {status.kind === 'loading' || status.kind === 'empty' ? (
             busy(list.length > 0 ? `${counted} · refreshing…` : 'Loading issues…')
           ) : (
@@ -759,19 +760,17 @@ export const register: Register = (on, options) => {
       const about = meta(issue, now)
       const pr = issue.pr === null ? null : { ...issue.pr, ...prBadge(issue.pr) }
 
+      const isClosed = issue.state.toUpperCase() === 'CLOSED'
+
       return (
-        <Box
-          key={`issue:${issue.number}`}
-          flexDirection="column"
-          marginTop={1}
-          paddingX={1}
-          borderStyle="bold"
-          borderColor={isWorking ? 'claude' : CARD_BORDER}
-        >
-          <Text bold wrap="wrap" {...(isWorking ? { color: 'claude' } : {})}>
-            {issue.title}
-          </Text>
-          <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <Box key={`issue:${issue.number}`} flexDirection="column">
+          <Box flexDirection="row" columnGap={1}>
+            <Text color={isWorking ? 'claude' : isClosed ? CLOSED_COLOR : OPEN_COLOR}>{isWorking ? '●' : isClosed ? '✓' : '○'}</Text>
+            <Text bold wrap="wrap" {...(isWorking ? { color: 'claude' } : {})}>
+              {issue.title}
+            </Text>
+          </Box>
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
             <Link href={issue.url} label={`#${issue.number}`} />
             {about !== '' && <Text dimColor>{`· ${about}`}</Text>}
             {pr !== null && (
@@ -781,21 +780,14 @@ export const register: Register = (on, options) => {
                 <Text color={pr.color}>{pr.text}</Text>
               </Box>
             )}
-          </Box>
-          {shownLabels.shown.length > 0 && (
-            <Box
-              key={`labels:${issue.number}`}
-              flexDirection="row"
-              flexWrap="wrap"
-              alignItems="center"
-              columnGap={1}
-              marginTop={1}
-            >
-              {chipsOf(shownLabels.shown)}
-              {shownLabels.more > 0 && <Text dimColor>{`+${shownLabels.more}`}</Text>}
-            </Box>
-          )}
-          <Box flexDirection="row" columnGap={3} marginTop={1}>
+            {Svg === undefined && shownLabels.shown.length > 0 && (
+              <Box key={`labels:${issue.number}`} flexDirection="row" columnGap={1}>
+                <Text dimColor>·</Text>
+                {chipsOf(shownLabels.shown)}
+                {shownLabels.more > 0 && <Text dimColor>{`+${shownLabels.more}`}</Text>}
+              </Box>
+            )}
+            <Text dimColor>·</Text>
             {commands.length === 0 ? (
               <Button
                 key={`work:${issue.number}`}
@@ -819,13 +811,26 @@ export const register: Register = (on, options) => {
             )}
             <Button
               key={`details:${issue.number}`}
-              label={isOpenHere ? 'Hide details' : 'Details'}
+              label={isOpenHere ? '▾' : '▸'}
               plain
               onPress={() => void toggleDetail($, issue.number)}
             />
           </Box>
+          {Svg !== undefined && shownLabels.shown.length > 0 && (
+            <Box
+              key={`labels:${issue.number}`}
+              flexDirection="row"
+              flexWrap="wrap"
+              alignItems="center"
+              columnGap={1}
+              paddingLeft={2}
+            >
+              {chipsOf(shownLabels.shown)}
+              {shownLabels.more > 0 && <Text dimColor>{`+${shownLabels.more}`}</Text>}
+            </Box>
+          )}
           {isOpenHere && (
-            <Box flexDirection="column" marginTop={1}>
+            <Box flexDirection="column" paddingLeft={2}>
               <Text dimColor wrap="truncate-end">
                 {'─'.repeat(rule)}
               </Text>
@@ -854,7 +859,9 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {top}
-        {fitted.kept}
+        <Box flexDirection="column" marginTop={1}>
+          {fitted.kept}
+        </Box>
         {fitted.cut > 0 && (
           <Box marginTop={1}>
             <Text dimColor wrap="wrap">

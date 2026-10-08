@@ -261,7 +261,9 @@ describe('issues', () => {
         expect(String(pills?.props.source)).toContain('>bug</text>')
       }
       expect((await ui.find({ key: 'work:42' }))?.props).not.toHaveProperty('dimColor')
-      expect((await ui.find({ key: 'issue:42' }))?.props).toMatchObject({ borderStyle: 'bold', borderColor: '#8c959f' })
+      // Two rows per issue, no card frame: the open mark and the title, then number, meta and actions.
+      expect((await ui.find({ key: 'issue:42' }))?.props).not.toHaveProperty('borderStyle')
+      expect(await ui.find({ type: 'Text', text: '○' })).toBeDefined()
       expect((await ui.find({ key: 'filter:open' }))?.props).toMatchObject({ variant: 'primary' })
       expect((await ui.find({ key: 'filter:assigned' }))?.text).toBe('Assigned · 1')
       expect(await ui.findAll({ type: 'Button', text: 'Work on it' })).toHaveLength(2)
@@ -306,8 +308,8 @@ describe('issues', () => {
     expect(submitted[0]).toContain('gh issue view 42 -R acme/widgets --comments')
     expect((await ui.find({ type: 'Text', text: 'Crash on launch' }))?.props).toMatchObject({ color: 'claude' })
     expect((await ui.find({ key: 'work:42' }))?.text).toBe('● Working on it')
-    expect((await ui.find({ key: 'issue:42' }))?.props).toMatchObject({ borderColor: 'claude' })
-    expect((await ui.find({ key: 'issue:7' }))?.props).toMatchObject({ borderColor: '#8c959f' })
+    expect(await ui.findAll({ type: 'Text', text: '●' })).toHaveLength(1)
+    expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: 'claude' })
   })
 
   test('Work on it while Claude is busy shows Queued until the turn starts, and a second tap sends nothing', NO_COMMANDS, async ($, on) => {
