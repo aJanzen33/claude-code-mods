@@ -1,6 +1,6 @@
 {
   "name": "github-issues",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A side pane listing the repository's GitHub issues, with one click to have Claude work on one",
   "author": { "name": "Marco Carnevali", "url": "https://github.com/MarcoCarnevali" },
   "repository": "https://github.com/MarcoCarnevali/claude-code-mods",
@@ -19,6 +19,13 @@
       "title": "Run filters",
       "description": "Filters over the run:<command> labels, as Name: command, command; Name: command. Each shows as a button above the list beside All. Empty: no such filters.",
       "default": "Plan: wayfinder, research; Implement: implement"
+    },
+    "browser": {
+      "type": "string",
+      "title": "Open issues in",
+      "description": "Where ↗ opens an issue: cmux, a browser split beside the terminal that later issues reuse (the system browser outside cmux), or system, the default browser.",
+      "options": ["cmux", "system"],
+      "default": "cmux"
     },
     "background": {
       "type": "string",

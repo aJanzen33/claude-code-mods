@@ -36,6 +36,10 @@ Each card offers the slash commands set in **Issue commands** (`github-issues.co
 
 An issue labelled `run:<command>` (`run:implement`, `run:research`) offers that command alone, whatever the setting says; the label shows as its button, not as a chip. Only issues without such a label offer the commands of the setting.
 
+## Open in a browser
+
+**↗** on a card opens the issue on GitHub. In [cmux](https://cmux.dev) it opens a browser split beside the terminal (`cmux browser open`) and later issues load into that same split while it stays open; outside cmux, or with **Open issues in** (`github-issues.browser`) set to `system`, it opens the default browser.
+
 ## Sorting
 
 The button beside **Refresh** steps through the list's order: `#↓` by number, newest first (the default), `#↑` by number, oldest first, and **Updated**, last updated first.

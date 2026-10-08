@@ -668,6 +668,11 @@ export function paneBackground(setting: string): string | null {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : null
 }
 
+/** The browser surface `cmux browser open` reports (`OK surface=surface:12 pane=…`), or null. */
+export function cmuxSurface(stdout: string): string | null {
+  return stdout.match(/\bsurface=(\S+)/)?.[1] ?? null
+}
+
 /** The prompt "Work on it" submits. */
 export function workPrompt(repo: string, issue: Pick<Issue, 'number' | 'title' | 'url'>): string {
   return [

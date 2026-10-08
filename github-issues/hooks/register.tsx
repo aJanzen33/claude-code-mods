@@ -26,6 +26,7 @@ import {
   isRepoName,
   isSameRepo,
   issueArgs,
+  cmuxSurface,
   commandsFor,
   issueCommands,
   nextSort,
@@ -60,12 +61,17 @@ const PANE = 'github-issues'
 const TITLE = 'Issues'
 const REFRESH_MS = 2 * 60_000
 const GH_PATHS = ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
+const CMUX_PATHS = ['cmux', '/Applications/cmux.app/Contents/Resources/bin/cmux']
 // GitHub's open and closed issue colors; both read on a light pane and on a dark one.
 const OPEN_COLOR = '#3fb950'
 const CLOSED_COLOR = '#a371f7'
 
 // The run filters from the settings; register sets them on every load.
 let groups: RunGroup[] = []
+// Where ↗ opens an issue, from the settings.
+let browser: 'cmux' | 'system' = 'cmux'
+// The cmux browser split ↗ opened, reused for the next issue while it stays open.
+let browserSurface: string | undefined
 
 const EMPTY_PAGE: IssuesPane = {
   repo: null,
@@ -166,6 +172,39 @@ async function gh($: EngineInterface, args: string[]): Promise<Gh> {
   } catch {
     return { ok: false, message: 'gh did not answer in time.' }
   }
+}
+
+/** Runs `argv`, true when it exited 0; false when it failed or is not installed. */
+async function tryRun($: EngineInterface, argv: string[]): Promise<{ ok: boolean; stdout: string }> {
+  try {
+    const ran = await $.process.run(argv, { timeoutMs: 10_000 })
+
+    return { ok: ran.exitCode === 0, stdout: ran.stdout }
+  } catch {
+    return { ok: false, stdout: '' }
+  }
+}
+
+/**
+ * Shows `url` in a cmux browser split beside the terminal, the one ↗ opened
+ * before while it is still open; with `browser` set to system, or outside
+ * cmux, in the default browser.
+ */
+async function openInBrowser($: EngineInterface, url: string): Promise<void> {
+  if (browser === 'cmux') {
+    for (const cmux of CMUX_PATHS) {
+      if (browserSurface !== undefined) {
+        if ((await tryRun($, [cmux, 'browser', '--surface', browserSurface, 'navigate', url])).ok) return
+        browserSurface = undefined
+      }
+      const opened = await tryRun($, [cmux, 'browser', 'open', url, '--focus', 'false'])
+      if (opened.ok) {
+        browserSurface = cmuxSurface(opened.stdout) ?? undefined
+        return
+      }
+    }
+  }
+  if (!(await tryRun($, ['open', url])).ok) $.ui.toast(`Could not open ${url}.`)
 }
 
 async function detectRepo($: EngineInterface): Promise<string | null> {
@@ -491,6 +530,7 @@ async function workOn($: EngineInterface, issue: Issue, command?: string): Promi
 
 export const register: Register = (on, options) => {
   groups = runGroups(typeof options.runGroups === 'string' ? options.runGroups : '')
+  browser = options.browser === 'system' ? 'system' : 'cmux'
   const commands = issueCommands(typeof options.commands === 'string' ? options.commands : '')
   const background = paneBackground(typeof options.background === 'string' ? options.background : '')
 
@@ -864,6 +904,7 @@ export const register: Register = (on, options) => {
               plain
               onPress={() => void toggleDetail($, issue.number)}
             />
+            <Button key={`open:${issue.number}`} label="↗" plain onPress={() => void openInBrowser($, issue.url)} />
           </Box>
           {Svg !== undefined && shownLabels.shown.length > 0 && (
             <Box

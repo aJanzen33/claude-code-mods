@@ -10,6 +10,7 @@ import {
   chips,
   excerpt,
   fitCards,
+  cmuxSurface,
   commandsFor,
   isSameRepo,
   issueArgs,
@@ -172,6 +173,10 @@ type Fake = {
   gate: Promise<void> | undefined
   failing: boolean
   runLabel: string | undefined
+  // Whether cmux answers; false stands for a terminal outside cmux.
+  hasCmux: boolean
+  // The argv of every run that was not gh.
+  opened: string[][]
 }
 
 /** Fakes the surface, the session's git remote and the `gh` CLI. */
@@ -191,6 +196,8 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     gate: undefined,
     failing: false,
     runLabel: undefined,
+    hasCmux: true,
+    opened: [],
   }
 
   mock.store(on)
@@ -221,7 +228,14 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
   })
   on('process.run', async ($, e) => {
     fake.calls.push([...e.argv])
-    const [, command, verb] = e.argv
+    const [program = '', command, verb] = e.argv
+    if (program.endsWith('cmux') || program === 'open') {
+      fake.opened.push([...e.argv])
+      if (program === 'open') return ran('')
+      if (!fake.hasCmux) return ran('', 1, 'cmux is not running')
+      if (command === 'browser' && verb === 'open') return ran('OK surface=surface:7 pane=pane:3 placement=split')
+      return ran('OK')
+    }
     if (command === '--version') return ran('gh version 2.80.0')
     if (command === 'issue' && verb === 'view') {
       return ran(JSON.stringify({ number: 42, body: 'It crashes **every** time.', comments: [{}, {}] }))
@@ -651,6 +665,40 @@ describe('pane background', () => {
   })
 })
 
+describe('open in browser', () => {
+  test('↗ opens a cmux browser split, and the next issue reuses it', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await ui.press({ key: 'open:42' })
+    await ui.press({ key: 'open:7' })
+    expect(fake.opened).toEqual([
+      ['cmux', 'browser', 'open', 'https://github.com/acme/widgets/issues/42', '--focus', 'false'],
+      ['cmux', 'browser', '--surface', 'surface:7', 'navigate', 'https://github.com/acme/widgets/issues/7'],
+    ])
+  })
+
+  test('outside cmux, ↗ opens the default browser', async ($, on) => {
+    const fake = fakeGitHub(on)
+    fake.hasCmux = false
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await ui.press({ key: 'open:42' })
+    expect(fake.opened.at(-1)).toEqual(['open', 'https://github.com/acme/widgets/issues/42'])
+  })
+
+  test('set to system, ↗ goes straight to the default browser', { options: { browser: 'system' } }, async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await ui.press({ key: 'open:42' })
+    expect(fake.opened).toEqual([['open', 'https://github.com/acme/widgets/issues/42']])
+  })
+})
+
 describe('assignment alerts', () => {
   test('the first look is quiet; a newly assigned issue toasts, and the status line counts them', async ($, on) => {
     const fake = fakeGitHub(on)
@@ -1005,5 +1053,10 @@ describe('lib', () => {
     expect(searchQuery('a/b', 'open', '', '', ['wayfinder', 'research'])).toBe(
       'repo:a/b is:issue is:open label:"run:wayfinder","run:research" sort:updated-desc',
     )
+  })
+
+  test('cmuxSurface reads the surface cmux opened', () => {
+    expect(cmuxSurface('OK surface=surface:1000010023 pane=pane:1000010013 placement=split')).toBe('surface:1000010023')
+    expect(cmuxSurface('OK')).toBeNull()
   })
 })
