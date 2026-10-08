@@ -1,4 +1,4 @@
-import type { Issue, IssueDetail, IssueFilter, IssueLabel, IssueSort, LinkedPr, RepoChoice, RunGroup } from '../types'
+import type { Issue, IssueComment, IssueDetail, IssueFilter, IssueLabel, IssueSort, IssueThread, LinkedPr, RepoChoice, RunGroup } from '../types'
 
 export const LIMIT = 40
 export const REPO_LIMIT = 30
@@ -517,6 +517,79 @@ export function newlyAssigned(assigned: Assigned, seen: unknown): Assigned['issu
 }
 
 /** The toast for newly assigned issues. */
+/** The `gh` arguments that read one issue whole, for the reader pane. */
+export function threadArgs(repo: string, number: number): string[] {
+  return ['issue', 'view', String(number), '-R', repo, '--json', 'number,title,url,state,author,createdAt,labels,body,comments']
+}
+
+type RawThread = {
+  number: number
+  title?: string
+  url?: string
+  state?: string
+  author?: { login?: string } | null
+  createdAt?: string
+  labels?: { name: string; color?: string }[]
+  body?: string
+  comments?: { author?: { login?: string } | null; createdAt?: string; body?: string }[]
+}
+
+/** `gh issue view --json` for the reader, as an IssueThread. */
+export function parseThread(stdout: string): IssueThread {
+  const raw = JSON.parse(stdout) as RawThread
+
+  return {
+    number: raw.number,
+    title: raw.title ?? '',
+    url: raw.url ?? '',
+    state: raw.state ?? 'OPEN',
+    author: raw.author?.login ?? '',
+    createdAt: raw.createdAt ?? '',
+    labels: (raw.labels ?? []).map(one => ({ name: one.name, color: one.color ?? '' })),
+    body: raw.body ?? '',
+    comments: (raw.comments ?? []).map(one => ({
+      author: one.author?.login ?? '',
+      createdAt: one.createdAt ?? '',
+      body: one.body ?? '',
+    })),
+  }
+}
+
+/**
+ * What the reader draws of `thread`: the body and the comments, in order, as
+ * long as they fit `budget` characters (the engine refuses a whole tree past
+ * its bound), and how many comments were left out.
+ */
+export function fitThread(thread: IssueThread, budget = 60_000): { body: string; comments: IssueComment[]; cut: number } {
+  const body = excerpt(thread.body, budget)
+  let left = budget - body.length
+  const comments: IssueComment[] = []
+  for (const comment of thread.comments) {
+    const text = excerpt(comment.body, budget)
+    if (text.length > left) break
+    comments.push({ ...comment, body: text })
+    left -= text.length
+  }
+
+  return { body, comments, cut: thread.comments.length - comments.length }
+}
+
+/** The thread as an Issue, for the commands its reader offers. */
+export function threadIssue(thread: IssueThread): Issue {
+  return {
+    number: thread.number,
+    title: thread.title,
+    url: thread.url,
+    state: thread.state,
+    labels: thread.labels,
+    assignees: [],
+    author: thread.author,
+    updatedAt: thread.createdAt,
+    comments: thread.comments.length,
+    pr: null,
+  }
+}
+
 export function assignedToast(repo: string, fresh: Assigned['issues']): string | undefined {
   const [first] = fresh
   if (first === undefined) return undefined

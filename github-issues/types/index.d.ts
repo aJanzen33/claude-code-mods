@@ -76,6 +76,25 @@ export type RepoPicker = {
 /** The issue handed to Claude: queued until Claude's turn on it starts, then working; `command` when a slash command took it. */
 export type ActiveIssue = { number: number; state: 'queued' | 'working'; command?: string }
 
+/** One comment as the reader shows it. */
+export type IssueComment = { author: string; createdAt: string; body: string }
+
+/** An issue as the reader shows it: the whole body and every comment. */
+export type IssueThread = {
+  number: number
+  title: string
+  url: string
+  state: string
+  author: string
+  createdAt: string
+  labels: IssueLabel[]
+  body: string
+  comments: IssueComment[]
+}
+
+/** The issue open in the reader pane, and the thread once loaded. */
+export type ReaderIssue = { repo: string; number: number; load: IssueLoad; thread: IssueThread | null }
+
 /** The issue whose details are open, and its details once loaded. */
 export type OpenIssue = { number: number; detail: IssueDetail | null }
 
@@ -90,6 +109,7 @@ declare module 'claude-code' {
       searchDraft: string
       open: OpenIssue | null
       active: ActiveIssue | null
+      reading: ReaderIssue | null
     }
   }
 }

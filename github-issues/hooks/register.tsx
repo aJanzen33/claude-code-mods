@@ -10,11 +10,13 @@ import type {
   IssuesPane,
   IssueView,
   OpenIssue,
+  ReaderIssue,
   RepoChoice,
   RepoPicker,
   RunGroup,
 } from '../types'
 import {
+  age,
   FILTERS,
   SPINNER_MS,
   SPINNER_SVG,
@@ -28,6 +30,10 @@ import {
   issueArgs,
   cmuxSurface,
   commandsFor,
+  fitThread,
+  parseThread,
+  threadArgs,
+  threadIssue,
   issueCommands,
   nextSort,
   SORTS,
@@ -58,6 +64,8 @@ import {
 import type { Assigned, IssuesPage } from './lib'
 
 const PANE = 'github-issues'
+// The second pane: one issue whole, opened by ≡ on its card.
+const READER = 'github-issue'
 const TITLE = 'Issues'
 const REFRESH_MS = 2 * 60_000
 const GH_PATHS = ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
@@ -95,6 +103,7 @@ const page = atom({ plugin: 'github-issues', key: 'page' } as const, EMPTY_PAGE)
 const searchDraft = atom({ plugin: 'github-issues', key: 'searchDraft' } as const, '')
 const open = atom({ plugin: 'github-issues', key: 'open' } as const, null)
 const active = atom({ plugin: 'github-issues', key: 'active' } as const, null)
+const reading = atom({ plugin: 'github-issues', key: 'reading' } as const, null)
 
 type Gh = { ok: true; stdout: string } | { ok: false; message: string }
 
@@ -415,6 +424,36 @@ async function openPane($: EngineInterface): Promise<void> {
   await $.store.set('isOpen', true)
 }
 
+/** Opens `number` of the listed repository in the reader pane, a tab beside the list, and loads it whole. */
+async function openReader($: EngineInterface, number: number): Promise<void> {
+  const repo = (await read($, page)).repo
+  if (repo === null) return
+  await update($, reading, (): ReaderIssue => ({ repo, number, load: { kind: 'loading' }, thread: null }))
+  await $.ui.open({ id: READER, title: `#${number}` })
+  await loadThread($, repo, number)
+}
+
+async function loadThread($: EngineInterface, repo: string, number: number): Promise<void> {
+  const viewed = await gh($, threadArgs(repo, number))
+  const still = (shown: ReaderIssue | null) => shown?.repo === repo && shown.number === number
+  if (!still(await read($, reading))) return
+  if (!viewed.ok) {
+    await update($, reading, (shown): ReaderIssue | null =>
+      still(shown) ? { repo, number, load: { kind: 'error', message: viewed.message }, thread: null } : shown,
+    )
+    return
+  }
+  try {
+    const thread = parseThread(viewed.stdout)
+    await update($, reading, (shown): ReaderIssue | null => (still(shown) ? { repo, number, load: { kind: 'ready' }, thread } : shown))
+  } catch {
+    const message = 'gh answered with something that is not JSON.'
+    await update($, reading, (shown): ReaderIssue | null =>
+      still(shown) ? { repo, number, load: { kind: 'error', message }, thread: null } : shown,
+    )
+  }
+}
+
 async function toggleDetail($: EngineInterface, number: number): Promise<void> {
   try {
     await loadDetail($, number)
@@ -480,8 +519,8 @@ async function loadDetail($: EngineInterface, number: number): Promise<void> {
  * issue was already handed over. With `command`, the issue goes to that
  * slash command (`/implement #42 <url>`) in place of the prompt.
  */
-async function workOn($: EngineInterface, issue: Issue, command?: string): Promise<void> {
-  const target = (await read($, page)).repo
+async function workOn($: EngineInterface, issue: Issue, command?: string, repo?: string): Promise<void> {
+  const target = repo ?? (await read($, page)).repo
   if (target === null) return
   const current = await read($, active)
   if (current?.number === issue.number) {
@@ -588,6 +627,7 @@ export const register: Register = (on, options) => {
 
   on('ui.close', async ($, e, next) => {
     if (e.id === PANE && e.origin.kind === 'person') await $.store.set('isOpen', false)
+    if (e.id === READER) await update($, reading, () => null)
 
     return next(e)
   })
@@ -904,6 +944,7 @@ export const register: Register = (on, options) => {
               plain
               onPress={() => void toggleDetail($, issue.number)}
             />
+            <Button key={`read:${issue.number}`} label="≡" plain onPress={() => void openReader($, issue.number)} />
             <Button key={`open:${issue.number}`} label="↗" plain onPress={() => void openInBrowser($, issue.url)} />
           </Box>
           {Svg !== undefined && shownLabels.shown.length > 0 && (
@@ -962,4 +1003,81 @@ export const register: Register = (on, options) => {
       </Box>
     )
   })
+
+  on('ui.render', { component: 'Pane', requestId: READER }, async ($, e) => {
+    const { Box, Button, Link, Markdown, Text } = $.ui.resolve(e)
+    const shown = await read($, reading)
+    const working = await read($, active)
+    const now = await $.clock.now()
+    const paint = (tree: JSX.Element) =>
+      background === null ? (
+        tree
+      ) : (
+        <Box flexDirection="column" width={e.props.bodyColumns} minHeight={e.props.scroll.bodyRows} backgroundColor={background}>
+          {tree}
+        </Box>
+      )
+
+    if (shown === null) return paint(<Text dimColor>Press ≡ on an issue in the Issues pane to read it here.</Text>)
+    const { repo, number, thread } = shown
+    if (thread === null) {
+      return paint(
+        <Text dimColor wrap="wrap">
+          {shown.load.kind === 'error' ? `Could not load #${number}: ${shown.load.message}` : `Loading #${number}…`}
+        </Text>,
+      )
+    }
+
+    const isClosed = thread.state.toUpperCase() === 'CLOSED'
+    const issue = threadIssue(thread)
+    const fitted = fitThread(thread)
+    const labels = thread.labels.filter(one => !one.name.startsWith(RUN_LABEL)).map(one => one.name)
+    const about = [repo, thread.author === '' ? '' : `@${thread.author}`, age(thread.createdAt, now), labels.join(', ')]
+      .filter(Boolean)
+      .join(' · ')
+
+    return paint(
+      <Box flexDirection="column">
+        <Box flexDirection="row" columnGap={1}>
+          <Text color={isClosed ? CLOSED_COLOR : OPEN_COLOR}>{isClosed ? '✓' : '○'}</Text>
+          <Text bold wrap="wrap">
+            {thread.title}
+          </Text>
+        </Box>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
+          <Link href={thread.url} label={`#${number}`} />
+          <Text dimColor>{`· ${about} ·`}</Text>
+          {commandsFor(thread, commands).map(command => {
+            const mine = working?.number === number && working.command === command ? working.state : null
+
+            return (
+              <Button
+                key={`reader-run:${command}`}
+                label={mine === 'queued' ? `◷ /${command}` : mine === 'working' ? `● /${command}` : `/${command}`}
+                plain
+                onPress={() => void workOn($, issue, command, repo)}
+              />
+            )
+          })}
+          <Button key="reader-open" label="↗" plain onPress={() => void openInBrowser($, thread.url)} />
+          <Button key="reader-reload" label="↻" plain onPress={() => void loadThread($, repo, number)} />
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          <Markdown key="reader-body" text={fitted.body} />
+        </Box>
+        {fitted.comments.map((comment, index) => (
+          <Box key={`comment:${index}`} flexDirection="column" marginTop={1}>
+            <Text dimColor>{`── @${comment.author} · ${age(comment.createdAt, now)}`}</Text>
+            <Markdown key={`comment-body:${index}`} text={comment.body} />
+          </Box>
+        ))}
+        {fitted.cut > 0 && (
+          <Box marginTop={1}>
+            <Text dimColor>{`${fitted.cut} more ${fitted.cut === 1 ? 'comment' : 'comments'} on GitHub.`}</Text>
+          </Box>
+        )}
+      </Box>,
+    )
+  })
+
 }

@@ -12,6 +12,8 @@ import {
   fitCards,
   cmuxSurface,
   commandsFor,
+  fitThread,
+  parseThread,
   isSameRepo,
   issueArgs,
   issueCommands,
@@ -177,6 +179,8 @@ type Fake = {
   hasCmux: boolean
   // The argv of every run that was not gh.
   opened: string[][]
+  // The id of every pane opened.
+  panes: string[]
 }
 
 /** Fakes the surface, the session's git remote and the `gh` CLI. */
@@ -198,10 +202,15 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     runLabel: undefined,
     hasCmux: true,
     opened: [],
+    panes: [],
   }
 
   mock.store(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', ($, e) => {
+    fake.panes.push(e.id)
+
+    return { value: { isPlaced: true } }
+  })
   on('ui.panes', () => ({
     value: fake.isPaneOpen
       ? [{ id: 'github-issues', title: 'Issues', isShown: true, isFocused: false, isPlaced: true }]
@@ -237,6 +246,20 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
       return ran('OK')
     }
     if (command === '--version') return ran('gh version 2.80.0')
+    if (command === 'issue' && verb === 'view' && e.argv.at(-1)?.includes('title')) {
+      const number = Number(e.argv[3])
+      return ran(JSON.stringify({
+        number,
+        title: TITLES[number] ?? 'Untitled',
+        url: `https://github.com/acme/widgets/issues/${number}`,
+        state: 'OPEN',
+        author: { login: 'ada' },
+        createdAt: '2026-10-01T10:00:00Z',
+        labels: [{ name: 'bug', color: 'd73a4a' }, { name: 'run:implement', color: '0e8a16' }],
+        body: 'It crashes **every** time.',
+        comments: [{ author: { login: 'bob' }, createdAt: '2026-10-02T10:00:00Z', body: 'Same here.' }],
+      }))
+    }
     if (command === 'issue' && verb === 'view') {
       return ran(JSON.stringify({ number: 42, body: 'It crashes **every** time.', comments: [{}, {}] }))
     }
@@ -699,6 +722,31 @@ describe('open in browser', () => {
   })
 })
 
+describe('reader', () => {
+  test('≡ opens the issue in a reader pane: title, body, comments and its run: command', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+    const list = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await list.press({ key: 'read:42' })
+    expect(fake.panes.at(-1)).toBe('github-issue')
+
+    const reader = await $.ui.mount({ ...PANE, requestId: 'github-issue', props: { ...PANE.props, title: '#42' }, surface: 'terminal' })
+    expect(await reader.find({ type: 'Text', text: 'Crash on launch' })).toBeDefined()
+    expect((await reader.find({ key: 'reader-body' }))?.text).toContain('It crashes **every** time.')
+    expect((await reader.find({ key: 'comment-body:0' }))?.text).toBe('Same here.')
+    expect(await reader.find({ type: 'Text', text: /@bob/ })).toBeDefined()
+    expect(await reader.find({ key: 'reader-run:implement' })).toBeDefined()
+    expect(await reader.find({ key: 'reader-run:wayfinder' })).toBeUndefined()
+    expect(await reader.find({ key: 'reader-open' })).toBeDefined()
+  })
+
+  test('with nothing chosen, the reader says how to fill it', async ($, on) => {
+    fakeGitHub(on)
+    const reader = await $.ui.mount({ ...PANE, requestId: 'github-issue', surface: 'terminal' })
+    expect(await reader.find({ type: 'Text', text: /Press ≡ on an issue/ })).toBeDefined()
+  })
+})
+
 describe('assignment alerts', () => {
   test('the first look is quiet; a newly assigned issue toasts, and the status line counts them', async ($, on) => {
     const fake = fakeGitHub(on)
@@ -1058,5 +1106,17 @@ describe('lib', () => {
   test('cmuxSurface reads the surface cmux opened', () => {
     expect(cmuxSurface('OK surface=surface:1000010023 pane=pane:1000010013 placement=split')).toBe('surface:1000010023')
     expect(cmuxSurface('OK')).toBeNull()
+  })
+
+  test('parseThread reads gh issue view; fitThread keeps comments in order until the budget runs out', () => {
+    const thread = parseThread(JSON.stringify({
+      number: 3, title: 'T', url: 'u', state: 'OPEN', author: { login: 'ada' }, createdAt: '2026-10-01T10:00:00Z',
+      labels: [{ name: 'bug', color: 'd73a4a' }], body: 'Body',
+      comments: [{ author: { login: 'bob' }, body: 'a'.repeat(30) }, { author: null, body: 'b'.repeat(30) }],
+    }))
+    expect(thread.author).toBe('ada')
+    expect(thread.comments.map(one => one.author)).toEqual(['bob', ''])
+    expect(fitThread(thread, 50)).toMatchObject({ body: 'Body', cut: 1 })
+    expect(fitThread(thread).cut).toBe(0)
   })
 })

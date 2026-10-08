@@ -36,6 +36,10 @@ Each card offers the slash commands set in **Issue commands** (`github-issues.co
 
 An issue labelled `run:<command>` (`run:implement`, `run:research`) offers that command alone, whatever the setting says; the label shows as its button, not as a chip. Only issues without such a label offer the commands of the setting.
 
+## Reader
+
+**≡** on a card opens the issue whole in a second pane, a tab beside the list: the title, the full description and every comment with its author and age, with the issue's commands, **↗** and **↻** (reload) at the top. Very long threads stop where the pane's size bound would, saying how many comments are left on GitHub.
+
 ## Open in a browser
 
 **↗** on a card opens the issue on GitHub. In [cmux](https://cmux.dev) it opens a browser split beside the terminal (`cmux browser open`) and later issues load into that same split while it stays open; outside cmux, or with **Open issues in** (`github-issues.browser`) set to `system`, it opens the default browser.
