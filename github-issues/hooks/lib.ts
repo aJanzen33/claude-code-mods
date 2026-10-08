@@ -647,11 +647,11 @@ export function age(iso: string, now: number): string {
   return `${Math.floor(days / 365)}y`
 }
 
-/** The dim text after an issue's number: assignees, when it last changed, comments. */
-export function meta(issue: Issue, now: number): string {
+/** The dim text after an issue's number: assignees, when it last changed (unless `withAge` is false), comments. */
+export function meta(issue: Issue, now: number, withAge = true): string {
   const parts = [
     issue.assignees.map(login => `@${login}`).join(' '),
-    age(issue.updatedAt, now),
+    withAge ? age(issue.updatedAt, now) : '',
     issue.comments === 0 ? '' : issue.comments === 1 ? '1 comment' : `${issue.comments} comments`,
   ]
 
@@ -750,6 +750,36 @@ export function runGroups(setting: string): RunGroup[] {
   }
 
   return groups
+}
+
+/** The color of each run: command, GitHub's green, purple and blue; others draw in the text color. */
+const RUN_COLORS: Record<string, string> = { implement: '#3fb950', wayfinder: '#a371f7', research: '#58a6ff' }
+
+/** The color an issue's number takes from its first run:<command> label, or null without one. */
+export function runColor(issue: Pick<Issue, 'labels'>): string | null {
+  const first = issue.labels.find(one => one.name.startsWith(RUN_LABEL))?.name.slice(RUN_LABEL.length)
+
+  return first === undefined ? null : (RUN_COLORS[first] ?? null)
+}
+
+/** A title's series prefix, `[Diff check 1]`, apart from the rest; '' when it has none. */
+export function splitSeries(title: string): { series: string; rest: string } {
+  const match = title.match(/^(\[[^\]]+\])\s*(.*)$/)
+
+  return match ? { series: match[1]!, rest: match[2]! } : { series: '', rest: title }
+}
+
+/**
+ * What every listed issue shares and so tells none apart: the labels all of
+ * them carry, and whether their ages read the same. Nothing for fewer than two.
+ */
+export function sameAcross(issues: readonly Pick<Issue, 'labels' | 'updatedAt'>[], now: number): { labels: Set<string>; age: boolean } {
+  if (issues.length < 2) return { labels: new Set(), age: false }
+  const [first, ...rest] = issues
+  const labels = new Set(first!.labels.map(one => one.name).filter(name => rest.every(issue => issue.labels.some(one => one.name === name))))
+  const ages = new Set(issues.map(issue => age(issue.updatedAt, now)))
+
+  return { labels, age: ages.size === 1 }
 }
 
 /** What an issue command runs with: the issue's number and its URL, so the skill can read it. */

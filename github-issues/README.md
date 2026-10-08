@@ -34,6 +34,10 @@ In the picker, repositories are grouped by owner. Type in the filter box to narr
 
 One row: the repository and how many issues are loaded, then **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh) and **Filter ▸**. The filters (tabs, run filters, search, label and milestone) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).
 
+## The list
+
+Each issue is its number, in a column of its own, beside the title, then one dim row of what tells it apart and its actions; faint rules sit between issues. The number takes the color of the issue's `run:` label (green implement, purple wayfinder, blue research), and a series prefix such as `[Diff check 1]` stands out in it. Labels every listed issue carries and an age they all share are left out. The actions stay dim, lit under the pointer where the surface tracks it.
+
 ## Issue commands
 
 Each card offers the slash commands set in **Issue commands** (`github-issues.commands` in `/config`), `/implement` and `/wayfinder` by default. A press runs `/<command> #<number> <url>` in this session, once it is idle, and the button shows `◷` while queued and `●` once it runs. Any slash command or skill works, e.g. `implement, wayfinder, mattpocock-skills:tdd`. Leave the setting empty for the card's original **Work on it** button.

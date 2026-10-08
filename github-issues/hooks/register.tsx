@@ -38,6 +38,9 @@ import {
   nextSort,
   SORTS,
   runGroups,
+  runColor,
+  sameAcross,
+  splitSeries,
   RUN_LABEL,
   paneBackground,
   issuesArgs,
@@ -73,6 +76,8 @@ const GH_PATHS = ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
 const CMUX_PATHS = ['cmux', '/Applications/cmux.app/Contents/Resources/bin/cmux']
 // GitHub's open and closed issue colors; both read on a light pane and on a dark one.
 const OPEN_COLOR = '#3fb950'
+// A faint gray between issues, on a light pane and on a dark one.
+const DIVIDER = '#6e7681'
 const CLOSED_COLOR = '#a371f7'
 
 // The run filters from the settings; register sets them on every load.
@@ -935,107 +940,124 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
-    const cards = list.map(issue => {
+    // Told apart by what differs: labels on every listed issue and an age they all share drop out.
+    const same = sameAcross(list, now)
+    // The number column fits the widest number.
+    const gutter = Math.max(3, ...list.map(issue => String(issue.number).length + 1))
+    // Buttons stay dim until the pointer is over their issue, where the surface can tell.
+    const quiet = { dimColor: true, hover: { dimColor: false } } as const
+
+    const cards = list.map((issue, index) => {
       const isOpenHere = opened?.number === issue.number
       const handed = working?.number === issue.number ? working.state : null
       const isWorking = handed !== null
       // A run:<command> label shows as its button, not as a chip.
-      const shownLabels = chips(issue.labels.filter(one => !one.name.startsWith(RUN_LABEL)))
+      const shownLabels = chips(issue.labels.filter(one => !one.name.startsWith(RUN_LABEL) && !same.labels.has(one.name)))
       const offered = commandsFor(issue, commands)
-      const about = meta(issue, now)
+      const about = meta(issue, now, !same.age)
       const pr = issue.pr === null ? null : { ...issue.pr, ...prBadge(issue.pr) }
-
       const isClosed = issue.state.toUpperCase() === 'CLOSED'
+      const tint = runColor(issue)
+      const { series, rest } = splitSeries(issue.title)
+      const isLast = index === list.length - 1
 
       return (
         <Box key={`issue:${issue.number}`} flexDirection="column">
           <Box flexDirection="row" columnGap={1}>
-            <Text color={isWorking ? 'claude' : isClosed ? CLOSED_COLOR : OPEN_COLOR}>{isWorking ? '●' : isClosed ? '✓' : '○'}</Text>
-            <Text bold wrap="wrap" {...(isWorking ? { color: 'claude' } : {})}>
-              {issue.title}
-            </Text>
-          </Box>
-          <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
-            <Link href={issue.url} label={`#${issue.number}`} />
-            {about !== '' && <Text dimColor>{`· ${about}`}</Text>}
-            {pr !== null && (
-              <Box key={`pr:${issue.number}`} flexDirection="row" columnGap={1}>
-                <Text dimColor>·</Text>
-                <Link href={pr.url} label={`PR #${pr.number}`} />
-                <Text color={pr.color}>{pr.text}</Text>
-              </Box>
-            )}
-            {Svg === undefined && shownLabels.shown.length > 0 && (
-              <Box key={`labels:${issue.number}`} flexDirection="row" columnGap={1}>
-                <Text dimColor>·</Text>
-                {chipsOf(shownLabels.shown)}
-                {shownLabels.more > 0 && <Text dimColor>{`+${shownLabels.more}`}</Text>}
-              </Box>
-            )}
-            <Text dimColor>·</Text>
-            {offered.length === 0 ? (
-              <Button
-                key={`work:${issue.number}`}
-                label={handed === 'queued' ? '◷ Queued' : handed === 'working' ? '● Working on it' : 'Work on it'}
-                plain
-                onPress={() => void workOn($, issue)}
-              />
-            ) : (
-              offered.map(command => {
-                const mine = working?.command === command ? handed : null
-
-                return (
-                  <Button
-                    key={`run:${command}:${issue.number}`}
-                    label={mine === 'queued' ? `◷ /${command}` : mine === 'working' ? `● /${command}` : `/${command}`}
-                    plain
-                    onPress={() => void workOn($, issue, command)}
-                  />
-                )
-              })
-            )}
-            <Button
-              key={`details:${issue.number}`}
-              label={isOpenHere ? '▾' : '▸'}
-              plain
-              onPress={() => void toggleDetail($, issue.number)}
-            />
-            <Button key={`read:${issue.number}`} label="≡" plain onPress={() => void openReader($, issue.number)} />
-            <Button key={`open:${issue.number}`} label="↗" plain onPress={() => void openInBrowser($, issue.url)} />
-          </Box>
-          {Svg !== undefined && shownLabels.shown.length > 0 && (
-            <Box
-              key={`labels:${issue.number}`}
-              flexDirection="row"
-              flexWrap="wrap"
-              alignItems="center"
-              columnGap={1}
-              paddingLeft={2}
-            >
-              {chipsOf(shownLabels.shown)}
-              {shownLabels.more > 0 && <Text dimColor>{`+${shownLabels.more}`}</Text>}
-            </Box>
-          )}
-          {isOpenHere && (
-            <Box flexDirection="column" paddingLeft={2}>
-              <Text dimColor wrap="truncate-end">
-                {'─'.repeat(rule)}
+            <Box width={gutter} flexShrink={0} justifyContent="flex-end">
+              <Text
+                bold
+                {...(isWorking ? { color: 'claude' } : isClosed ? { dimColor: true } : tint === null ? {} : { color: tint })}
+              >
+                {`#${issue.number}`}
               </Text>
-              {opened.detail !== null ? (
-                <Box flexDirection="column">
-                  <Markdown key={`body:${issue.number}`} text={excerpt(opened.detail.body)} />
-                  <Box flexDirection="row" columnGap={1} marginTop={1}>
-                    <Text dimColor>
-                      {opened.detail.comments === 1 ? '1 comment' : `${opened.detail.comments} comments`}
-                    </Text>
-                    <Text dimColor>·</Text>
-                    <Link href={issue.url} label="View on GitHub" />
+            </Box>
+            <Box flexDirection="column" flexShrink={1} flexGrow={1}>
+              <Text wrap="wrap" {...(isWorking ? { color: 'claude' } : {})}>
+                {series !== '' && <Text color={tint ?? 'claude'}>{`${series} `}</Text>}
+                {rest}
+              </Text>
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                {isClosed && <Text color={CLOSED_COLOR}>✓ closed</Text>}
+                {about !== '' && <Text dimColor>{about}</Text>}
+                {pr !== null && (
+                  <Box key={`pr:${issue.number}`} flexDirection="row" columnGap={1}>
+                    <Link href={pr.url} label={`PR #${pr.number}`} />
+                    <Text color={pr.color}>{pr.text}</Text>
                   </Box>
+                )}
+                {Svg === undefined && shownLabels.shown.length > 0 && (
+                  <Box key={`labels:${issue.number}`} flexDirection="row" columnGap={1}>
+                    {chipsOf(shownLabels.shown)}
+                    {shownLabels.more > 0 && <Text dimColor>{`+${shownLabels.more}`}</Text>}
+                  </Box>
+                )}
+                {(isClosed || about !== '' || pr !== null || (Svg === undefined && shownLabels.shown.length > 0)) && (
+                  <Text dimColor>·</Text>
+                )}
+                {offered.length === 0 ? (
+                  <Button
+                    key={`work:${issue.number}`}
+                    label={handed === 'queued' ? '◷ Queued' : handed === 'working' ? '● Working on it' : 'Work on it'}
+                    plain
+                    {...(isWorking ? {} : quiet)}
+                    onPress={() => void workOn($, issue)}
+                  />
+                ) : (
+                  offered.map(command => {
+                    const mine = working?.command === command ? handed : null
+
+                    return (
+                      <Button
+                        key={`run:${command}:${issue.number}`}
+                        label={mine === 'queued' ? `◷ /${command}` : mine === 'working' ? `● /${command}` : `/${command}`}
+                        plain
+                        {...(mine === null ? quiet : {})}
+                        onPress={() => void workOn($, issue, command)}
+                      />
+                    )
+                  })
+                )}
+                <Button
+                  key={`details:${issue.number}`}
+                  label={isOpenHere ? '▾' : '▸'}
+                  plain
+                  {...quiet}
+                  onPress={() => void toggleDetail($, issue.number)}
+                />
+                <Button key={`read:${issue.number}`} label="≡" plain {...quiet} onPress={() => void openReader($, issue.number)} />
+                <Button key={`open:${issue.number}`} label="↗" plain {...quiet} onPress={() => void openInBrowser($, issue.url)} />
+              </Box>
+              {Svg !== undefined && shownLabels.shown.length > 0 && (
+                <Box key={`labels:${issue.number}`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
+                  {chipsOf(shownLabels.shown)}
+                  {shownLabels.more > 0 && <Text dimColor>{`+${shownLabels.more}`}</Text>}
                 </Box>
-              ) : (
-                busy('Loading…')
+              )}
+              {isOpenHere && (
+                <Box flexDirection="column" marginTop={1}>
+                  {opened.detail !== null ? (
+                    <Box flexDirection="column">
+                      <Markdown key={`body:${issue.number}`} text={excerpt(opened.detail.body)} />
+                      <Box flexDirection="row" columnGap={1} marginTop={1}>
+                        <Text dimColor>
+                          {opened.detail.comments === 1 ? '1 comment' : `${opened.detail.comments} comments`}
+                        </Text>
+                        <Text dimColor>·</Text>
+                        <Link href={issue.url} label="View on GitHub" />
+                      </Box>
+                    </Box>
+                  ) : (
+                    busy('Loading…')
+                  )}
+                </Box>
               )}
             </Box>
+          </Box>
+          {!isLast && (
+            <Text color={DIVIDER} wrap="truncate-end">
+              {'─'.repeat(e.props.bodyColumns)}
+            </Text>
           )}
         </Box>
       )

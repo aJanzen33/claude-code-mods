@@ -12,6 +12,9 @@ import {
   fitCards,
   cmuxSurface,
   commandsFor,
+  runColor,
+  sameAcross,
+  splitSeries,
   fitThread,
   parseThread,
   isSameRepo,
@@ -301,8 +304,8 @@ describe('issues', () => {
       expect((await ui.find({ type: 'Text', text: /^widgets$/ }))?.props).toMatchObject({ bold: true })
       expect(await ui.find({ type: 'Text', text: /^2 open$/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: 'Crash on launch' })).toBeDefined()
-      expect(await ui.find({ type: 'Link', text: '#42' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /^· @marco · 5d · 2 comments$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: '#42' })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^@marco · 5d · 2 comments$/ })).toBeDefined()
       expect((await ui.find({ type: 'Link', text: 'PR #50' }))?.props).toMatchObject({
         href: 'https://github.com/acme/widgets/pull/50',
       })
@@ -315,10 +318,13 @@ describe('issues', () => {
         expect(pills?.props).toMatchObject({ alt: 'Labels: bug', height: 20 })
         expect(String(pills?.props.source)).toContain('>bug</text>')
       }
-      expect((await ui.find({ key: 'work:42' }))?.props).not.toHaveProperty('dimColor')
+      // Actions stay dim (lit under the pointer where the surface tracks it).
+      expect((await ui.find({ key: 'work:42' }))?.props).toMatchObject({ dimColor: true })
       // Two rows per issue, no card frame: the open mark and the title, then number, meta and actions.
       expect((await ui.find({ key: 'issue:42' }))?.props).not.toHaveProperty('borderStyle')
-      expect(await ui.find({ type: 'Text', text: '○' })).toBeDefined()
+      // The number heads its column; issues sit between faint rules.
+      expect((await ui.find({ type: 'Text', text: '#42' }))?.props).toMatchObject({ bold: true })
+      expect(await ui.findAll({ type: 'Text', text: /^─{60}$/ })).toHaveLength(1)
       expect((await ui.find({ key: 'filter:open' }))?.props).toMatchObject({ variant: 'primary' })
       expect((await ui.find({ key: 'filter:assigned' }))?.text).toBe('Assigned · 1')
       expect(await ui.findAll({ type: 'Button', text: 'Work on it' })).toHaveLength(2)
@@ -337,7 +343,6 @@ describe('issues', () => {
       const ui = await $.ui.mount({ ...PANE, surface })
       await ui.press({ key: 'details:42' })
       expect((await ui.find({ key: 'body:42' }))?.text).toContain('It crashes **every** time.')
-      expect(await ui.find({ type: 'Text', text: /^─{56}$/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: '2 comments' })).toBeDefined()
       await ui.press({ key: 'details:42' })
       expect(await ui.find({ key: 'body:42' })).toBeUndefined()
@@ -363,8 +368,8 @@ describe('issues', () => {
     expect(submitted[0]).toContain('gh issue view 42 -R acme/widgets --comments')
     expect((await ui.find({ type: 'Text', text: 'Crash on launch' }))?.props).toMatchObject({ color: 'claude' })
     expect((await ui.find({ key: 'work:42' }))?.text).toBe('● Working on it')
-    expect(await ui.findAll({ type: 'Text', text: '●' })).toHaveLength(1)
-    expect((await ui.find({ type: 'Text', text: '●' }))?.props).toMatchObject({ color: 'claude' })
+    expect((await ui.find({ type: 'Text', text: '#42' }))?.props).toMatchObject({ color: 'claude' })
+    expect((await ui.find({ type: 'Text', text: '#7' }))?.props).not.toHaveProperty('color')
   })
 
   test('Work on it while Claude is busy shows Queued until the turn starts, and a second tap sends nothing', NO_COMMANDS, async ($, on) => {
@@ -891,7 +896,7 @@ describe('picker', () => {
     expect(opened.text).toBe('Showing acme/widgets issues.')
     expect(fake.searches.at(-1)).toContain('repo:acme/widgets ')
     const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    expect(await ui.find({ type: 'Link', text: '#42' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '#42' })).toBeDefined()
   })
 
   test('/issues alone outside a GitHub repository opens the picker', async ($, on) => {
@@ -931,7 +936,7 @@ describe('picker', () => {
     await ui.press({ key: pickKey('other/thing') })
     expect(fake.searches.at(-1)).toContain('repo:other/thing ')
     expect(await ui.find({ type: 'Text', text: 'other / ' })).toBeDefined()
-    expect(await ui.find({ type: 'Link', text: '#42' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '#42' })).toBeDefined()
 
     await ui.press({ key: 'switch' })
     expect(await ui.find({ type: 'Text', text: 'Choose a repository' })).toBeDefined()
@@ -1197,5 +1202,25 @@ describe('lib', () => {
     expect(searchQuery('a/b', 'open', '', '', [], 'number-desc', 'Say "hi"')).toBe(
       'repo:a/b is:issue is:open milestone:"Say hi" sort:created-desc',
     )
+  })
+
+  test('runColor tints by the first run: label; splitSeries sets a [Series n] prefix apart', () => {
+    const issue = (...names: string[]) => ({ labels: names.map(name => ({ name, color: '' })) })
+    expect(runColor(issue('bug', 'run:implement'))).toBe('#3fb950')
+    expect(runColor(issue('run:wayfinder'))).toBe('#a371f7')
+    expect(runColor(issue('run:research'))).toBe('#58a6ff')
+    expect(runColor(issue('run:tdd'))).toBeNull()
+    expect(runColor(issue('bug'))).toBeNull()
+    expect(splitSeries('[Diff check 1] Kit script: diff-check.mjs')).toEqual({ series: '[Diff check 1]', rest: 'Kit script: diff-check.mjs' })
+    expect(splitSeries('Reset the patches')).toEqual({ series: '', rest: 'Reset the patches' })
+  })
+
+  test('sameAcross finds the labels and the age every listed issue shares', () => {
+    const at = (updatedAt: string, ...names: string[]) => ({ updatedAt, labels: names.map(name => ({ name, color: '' })) })
+    const shared = sameAcross([at('2026-10-06T09:07:00Z', 'aja-kit', 'bug'), at('2026-10-06T09:07:00Z', 'aja-kit')], NOW)
+    expect([...shared.labels]).toEqual(['aja-kit'])
+    expect(shared.age).toBe(true)
+    expect(sameAcross([at('2026-10-01T10:00:00Z', 'a'), at('2026-09-01T10:00:00Z', 'a')], NOW).age).toBe(false)
+    expect(sameAcross([at('2026-10-01T10:00:00Z', 'a')], NOW)).toEqual({ labels: new Set(), age: false })
   })
 })
