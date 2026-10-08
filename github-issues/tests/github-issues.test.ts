@@ -10,6 +10,7 @@ import {
   chips,
   excerpt,
   fitCards,
+  commandsFor,
   isSameRepo,
   issueArgs,
   issueCommands,
@@ -70,7 +71,9 @@ const ISSUE_NODES = [
 ]
 
 /** The GraphQL answer to the issues request, `mine` the person's assigned issue numbers. */
-function issuesPage(mine: readonly number[], extraLabels = 0, bulky = 0) {
+function issuesPage(mine: readonly number[], extraLabels = 0, bulky = 0, runLabel?: string) {
+  // #7 carries `runLabel` when a test gives one.
+  const nodes = runLabel === undefined ? ISSUE_NODES : [ISSUE_NODES[0], { ...ISSUE_NODES[1], labels: { nodes: [{ name: runLabel, color: '1d76db' }] } }]
   const more = Array.from({ length: extraLabels }, (_, index) => ({ name: `area/${index}`, color: '0e8a16' }))
   const heavy = Array.from({ length: bulky }, (_, index) => ({
     ...ISSUE_NODES[1],
@@ -81,7 +84,7 @@ function issuesPage(mine: readonly number[], extraLabels = 0, bulky = 0) {
 
   return {
     data: {
-      list: { issueCount: 2 + bulky, nodes: [...ISSUE_NODES, ...heavy] },
+      list: { issueCount: 2 + bulky, nodes: [...nodes, ...heavy] },
       mine: {
         issueCount: mine.length,
         nodes: mine.map(number => ({
@@ -166,6 +169,7 @@ type Fake = {
   invalidations: number
   gate: Promise<void> | undefined
   failing: boolean
+  runLabel: string | undefined
 }
 
 /** Fakes the surface, the session's git remote and the `gh` CLI. */
@@ -184,6 +188,7 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     invalidations: 0,
     gate: undefined,
     failing: false,
+    runLabel: undefined,
   }
 
   mock.store(on)
@@ -226,7 +231,7 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
       if (q !== undefined && fake.gate !== undefined) await fake.gate
       if (q !== undefined && fake.failing) return ran('', 1, 'HTTP 502: Bad Gateway')
 
-      return ran(JSON.stringify(issuesPage(fake.mine, fake.extraLabels, fake.bulky)))
+      return ran(JSON.stringify(issuesPage(fake.mine, fake.extraLabels, fake.bulky, fake.runLabel)))
     }
 
     return ran('', 1, 'unexpected gh call')
@@ -546,6 +551,23 @@ describe('issue commands', () => {
 
     await ui.press({ key: 'run:implement:42' })
     expect(ran).toHaveLength(1)
+  })
+
+  test('a run: label picks the card\'s command and leaves the chips; a card without one offers the setting\'s', async ($, on) => {
+    const fake = fakeGitHub(on)
+    fake.runLabel = 'run:research'
+    await slashIssues($, '.')
+
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({ ...PANE, surface })
+      expect((await ui.find({ key: 'run:research:7' }))?.text).toBe('/research')
+      expect(await ui.find({ key: 'run:implement:7' })).toBeUndefined()
+      expect(await ui.find({ key: 'run:wayfinder:7' })).toBeUndefined()
+      expect(await ui.find({ key: 'labels:7' })).toBeUndefined()
+      expect(await ui.find({ key: 'run:implement:42' })).toBeDefined()
+      expect(await ui.find({ key: 'run:wayfinder:42' })).toBeDefined()
+      await ui.unmount()
+    }
   })
 
   test('an unknown command hands nothing over and says why', async ($, on) => {
@@ -910,5 +932,15 @@ describe('lib', () => {
     expect(paneBackground('')).toBeNull()
     expect(paneBackground('black')).toBeNull()
     expect(paneBackground('#fff')).toBeNull()
+  })
+
+  test('commandsFor: the run: labels name the commands, else the setting does', () => {
+    const issue = (...names: string[]) => ({ labels: names.map(name => ({ name, color: '0e8a16' })) })
+    const configured = ['implement', 'wayfinder']
+    expect(commandsFor(issue('bug', 'run:implement'), configured)).toEqual(['implement'])
+    expect(commandsFor(issue('run:wayfinder', 'run:research'), configured)).toEqual(['wayfinder', 'research'])
+    expect(commandsFor(issue('bug'), configured)).toEqual(['implement', 'wayfinder'])
+    expect(commandsFor(issue('run:'), configured)).toEqual(['implement', 'wayfinder'])
+    expect(commandsFor(issue(), [])).toEqual([])
   })
 })

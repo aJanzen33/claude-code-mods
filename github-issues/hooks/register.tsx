@@ -25,7 +25,9 @@ import {
   isRepoName,
   isSameRepo,
   issueArgs,
+  commandsFor,
   issueCommands,
+  RUN_LABEL,
   paneBackground,
   issuesArgs,
   labelDot,
@@ -772,7 +774,9 @@ export const register: Register = (on, options) => {
       const isOpenHere = opened?.number === issue.number
       const handed = working?.number === issue.number ? working.state : null
       const isWorking = handed !== null
-      const shownLabels = chips(issue.labels)
+      // A run:<command> label shows as its button, not as a chip.
+      const shownLabels = chips(issue.labels.filter(one => !one.name.startsWith(RUN_LABEL)))
+      const offered = commandsFor(issue, commands)
       const about = meta(issue, now)
       const pr = issue.pr === null ? null : { ...issue.pr, ...prBadge(issue.pr) }
 
@@ -804,7 +808,7 @@ export const register: Register = (on, options) => {
               </Box>
             )}
             <Text dimColor>·</Text>
-            {commands.length === 0 ? (
+            {offered.length === 0 ? (
               <Button
                 key={`work:${issue.number}`}
                 label={handed === 'queued' ? '◷ Queued' : handed === 'working' ? '● Working on it' : 'Work on it'}
@@ -812,7 +816,7 @@ export const register: Register = (on, options) => {
                 onPress={() => void workOn($, issue)}
               />
             ) : (
-              commands.map(command => {
+              offered.map(command => {
                 const mine = working?.command === command ? handed : null
 
                 return (

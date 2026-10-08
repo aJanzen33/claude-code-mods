@@ -34,6 +34,8 @@ In the picker, repositories are grouped by owner. Type in the filter box to narr
 
 Each card offers the slash commands set in **Issue commands** (`github-issues.commands` in `/config`), `/implement` and `/wayfinder` by default. A press runs `/<command> #<number> <url>` in this session, once it is idle, and the button shows `◷` while queued and `●` once it runs. Any slash command or skill works, e.g. `implement, wayfinder, mattpocock-skills:tdd`. Leave the setting empty for the card's original **Work on it** button.
 
+An issue labelled `run:<command>` (`run:implement`, `run:research`) offers that command alone, whatever the setting says; the label shows as its button, not as a chip. Only issues without such a label offer the commands of the setting.
+
 ## Pane background
 
 **Pane background** (`github-issues.background` in `/config`) paints the pane's body in a color of your own, as `#rrggbb`. Empty keeps Claude Code's own.

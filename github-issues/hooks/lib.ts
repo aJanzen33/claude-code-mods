@@ -590,6 +590,20 @@ export function issueCommands(setting: string): string[] {
   return [...new Set(names)]
 }
 
+/** The label prefix that names an issue's next command: `run:implement`. */
+export const RUN_LABEL = 'run:'
+
+/**
+ * The commands an issue's card offers: those its `run:<command>` labels name,
+ * or, with none, the ones the setting names.
+ */
+export function commandsFor(issue: Pick<Issue, 'labels'>, configured: readonly string[]): string[] {
+  const named = issue.labels.filter(one => one.name.startsWith(RUN_LABEL)).map(one => one.name.slice(RUN_LABEL.length))
+  const fromLabels = issueCommands(named.join(','))
+
+  return fromLabels.length > 0 ? fromLabels : [...configured]
+}
+
 /** What an issue command runs with: the issue's number and its URL, so the skill can read it. */
 export function issueArgs(issue: Pick<Issue, 'number' | 'url'>): string {
   return `#${issue.number} ${issue.url}`
