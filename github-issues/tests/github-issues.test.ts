@@ -702,6 +702,15 @@ describe('open in browser', () => {
     ])
   })
 
+  test('↗ in the header opens the repository on GitHub', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await ui.press({ key: 'open-repo' })
+    expect(fake.opened.at(-1)).toEqual(['cmux', 'browser', 'open', 'https://github.com/acme/widgets', '--focus', 'false'])
+  })
+
   test('outside cmux, ↗ opens the default browser', async ($, on) => {
     const fake = fakeGitHub(on)
     fake.hasCmux = false

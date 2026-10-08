@@ -42,7 +42,7 @@ An issue labelled `run:<command>` (`run:implement`, `run:research`) offers that 
 
 ## Open in a browser
 
-**↗** on a card opens the issue on GitHub. In [cmux](https://cmux.dev) it opens a browser split beside the terminal (`cmux browser open`) and later issues load into that same split while it stays open; outside cmux, or with **Open issues in** (`github-issues.browser`) set to `system`, it opens the default browser.
+**↗** on a card opens the issue on GitHub, and **↗** in the header the repository. In [cmux](https://cmux.dev) it opens a browser split beside the terminal (`cmux browser open`) and later issues load into that same split while it stays open; outside cmux, or with **Open issues in** (`github-issues.browser`) set to `system`, it opens the default browser.
 
 ## Sorting
 

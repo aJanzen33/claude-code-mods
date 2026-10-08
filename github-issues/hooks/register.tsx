@@ -804,6 +804,9 @@ export const register: Register = (on, options) => {
             )}
           </Box>
           <Box flexDirection="row" columnGap={2} flexShrink={0}>
+            {shown !== null && (
+              <Button key="open-repo" label="↗" plain onPress={() => void openInBrowser($, `https://github.com/${shown}`)} />
+            )}
             <Button key="switch" label="Switch repo" plain onPress={() => void showRepos($)} />
             <Button
               key="sort"
