@@ -142,6 +142,11 @@ function slashIssues($: Engine, args = '') {
   })
 }
 
+/** Unfolds the filters (tabs, run filters, search, label) when they are folded away. */
+async function showFilters(ui: { find: (query: { key: string }) => Promise<unknown>; press: (target: { key: string }) => Promise<unknown> }) {
+  if ((await ui.find({ key: 'filter:open' })) === undefined) await ui.press({ key: 'toggle-filters' })
+}
+
 /** Opens the picker the way a person does from the session's repository: Switch repo. */
 async function openPicker($: Engine) {
   await slashIssues($, '.')
@@ -287,6 +292,7 @@ describe('issues', () => {
 
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
+      await showFilters(ui)
       expect(await ui.find({ type: 'Text', text: 'acme / ' })).toBeDefined()
       expect((await ui.find({ type: 'Text', text: /^widgets$/ }))?.props).toMatchObject({ bold: true })
       expect(await ui.find({ type: 'Text', text: /^2 open$/ })).toBeDefined()
@@ -405,11 +411,35 @@ describe('issues', () => {
     expect((await ui.find({ key: 'work:42' }))?.text).toBe('Work on it')
   })
 
+  test('the filters fold away under one button; folded, the header counts and a line names what narrows', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    expect(await ui.find({ key: 'filter:open' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^2 open$/ })).toBeDefined()
+    expect((await ui.find({ key: 'toggle-filters' }))?.text).toBe('Filter ▸')
+
+    await ui.press({ key: 'toggle-filters' })
+    await ui.press({ key: 'filter:assigned' })
+    await ui.press({ key: 'run-group:Plan' })
+    await ui.press({ key: 'toggle-filters' })
+    expect(await ui.find({ key: 'filter:open' })).toBeUndefined()
+    expect((await ui.find({ key: 'toggle-filters' }))?.text).toBe('Filter ▸ 2')
+    expect(await ui.find({ type: 'Text', text: 'Assigned · Plan' })).toBeDefined()
+
+    await ui.press({ key: 'clear-all' })
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
+    expect(await ui.find({ key: 'clear-all' })).toBeUndefined()
+  })
+
   test('tabs search for the matching issues', async ($, on) => {
     const fake = fakeGitHub(on)
     await slashIssues($, '.')
 
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await showFilters(ui)
     await ui.press({ key: 'filter:assigned' })
     expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open assignee:@me sort:created-desc')
     expect(await ui.find({ type: 'Text', text: /^2 assigned to you$/ })).toBeDefined()
@@ -424,6 +454,7 @@ describe('issues', () => {
 
     for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
       const ui = await $.ui.mount({ ...PANE, surface })
+      await showFilters(ui)
       await ui.input({ key: 'issue-search', text: 'crash' })
       expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open crash sort:created-desc')
       expect(await ui.find({ type: 'Text', text: /^matching "crash"$/ })).toBeDefined()
@@ -446,6 +477,7 @@ describe('issues', () => {
 
     for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
       const ui = await $.ui.mount({ ...PANE, surface })
+      await showFilters(ui)
       const options = (await ui.find({ key: 'label-filter' }))?.props.options as { value: string }[]
       expect(options).toHaveLength(64)
       expect(options.slice(0, 2).map(option => option.value)).toEqual(['', 'bug'])
@@ -519,6 +551,8 @@ describe('issues', () => {
     await slashIssues($, '.')
 
     const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+    await showFilters(ui)
     const before = JSON.stringify(await ui.drawn())
     await fake.clock.advance(2 * 60_000)
     expect(fake.searches).toHaveLength(2)
@@ -615,6 +649,8 @@ describe('issue commands', () => {
     await slashIssues($, '.')
 
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await showFilters(ui)
     expect((await ui.find({ key: 'run-group:*' }))?.props).toMatchObject({ variant: 'primary' })
     await ui.press({ key: 'run-group:Plan' })
     expect(fake.searches.at(-1)).toBe(
@@ -636,6 +672,7 @@ describe('issue commands', () => {
     fakeGitHub(on)
     await slashIssues($, '.')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await showFilters(ui)
     expect(await ui.find({ key: 'run-group:*' })).toBeUndefined()
   })
 
@@ -764,6 +801,7 @@ describe('assignment alerts', () => {
 
     fake.mine = [42, 7]
     const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await showFilters(ui)
     await ui.press({ key: 'refresh' })
     expect(fake.toasts).toEqual(['Assigned to you: #7 Dark mode'])
     expect((await ui.find({ key: 'filter:assigned' }))?.text).toBe('Assigned · 2')

@@ -104,6 +104,8 @@ const searchDraft = atom({ plugin: 'github-issues', key: 'searchDraft' } as cons
 const open = atom({ plugin: 'github-issues', key: 'open' } as const, null)
 const active = atom({ plugin: 'github-issues', key: 'active' } as const, null)
 const reading = atom({ plugin: 'github-issues', key: 'reading' } as const, null)
+// Whether the tabs, run filters, search and label picker show; folded away by default.
+const filtersOpen = atom({ plugin: 'github-issues', key: 'filtersOpen' } as const, false)
 
 type Gh = { ok: true; stdout: string } | { ok: false; message: string }
 
@@ -343,6 +345,12 @@ async function rescope($: EngineInterface, change: Partial<IssuesPane['scope']>)
 async function submitSearch($: EngineInterface, text: string): Promise<void> {
   await setSearchDraft($, text)
   await rescope($, { search: text.trim() })
+}
+
+/** Back to every open issue: no tab but Open, no run filter, search or label. */
+async function clearAll($: EngineInterface): Promise<void> {
+  await setSearchDraft($, '')
+  await rescope($, { filter: 'open', run: '', search: '', label: '' })
 }
 
 async function clearSearch($: EngineInterface): Promise<void> {
@@ -761,6 +769,14 @@ export const register: Register = (on, options) => {
       scope.label === '' ? '' : `label ${scope.label}`,
     ].filter(Boolean)
     const labelChoices = labelOptions(labels, list, scope.label)
+    const areFiltersShown = await read($, filtersOpen)
+    // What narrows the list beyond every open issue, said while the filters are folded away.
+    const applied = [
+      scope.filter === 'open' ? '' : (FILTERS.find(one => one.id === scope.filter)?.label ?? scope.filter),
+      scope.run ?? '',
+      ...narrowing,
+    ].filter(Boolean)
+    const isLoading = status.kind === 'loading' || status.kind === 'empty'
     // A card's inside: the pane's width less its border and padding.
     const rule = Math.max(1, e.props.bodyColumns - 4)
     const [owner, name] = shown === null ? [null, null] : (shown.split('/') as [string, string])
@@ -791,56 +807,87 @@ export const register: Register = (on, options) => {
     const top = (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" columnGap={2}>
-          <Box flexDirection="row" flexShrink={1}>
-            {owner === null ? (
-              <Text bold>No repository</Text>
-            ) : (
-              <Text dimColor wrap="truncate-end">{`${owner} / `}</Text>
-            )}
-            {name !== null && (
-              <Text bold wrap="truncate-end">
-                {name}
-              </Text>
+          <Box flexDirection="row" flexShrink={1} columnGap={1}>
+            <Box flexDirection="row" flexShrink={1}>
+              {owner === null ? (
+                <Text bold>No repository</Text>
+              ) : (
+                <Text dimColor wrap="truncate-end">{`${owner} / `}</Text>
+              )}
+              {name !== null && (
+                <Text bold wrap="truncate-end">
+                  {name}
+                </Text>
+              )}
+            </Box>
+            {isLoading ? (
+              busy(list.length > 0 ? `${counted} · refreshing…` : 'Loading issues…')
+            ) : status.kind === 'error' ? null : (
+              <Box flexDirection="row" columnGap={1} flexShrink={1}>
+                <Text dimColor>·</Text>
+                <Text dimColor wrap="truncate-end">
+                  {list.length > 0 ? counted : `No issues ${noun}.`}
+                </Text>
+              </Box>
             )}
           </Box>
           <Box flexDirection="row" columnGap={2} flexShrink={0}>
             {shown !== null && (
               <Button key="open-repo" label="↗" plain onPress={() => void openInBrowser($, `https://github.com/${shown}`)} />
             )}
-            <Button key="switch" label="Switch repo" plain onPress={() => void showRepos($)} />
+            <Button key="switch" label="Repos" plain onPress={() => void showRepos($)} />
             <Button
               key="sort"
               label={SORTS.find(one => one.id === (scope.sort ?? 'number-desc'))?.label ?? '#↓'}
               plain
               onPress={() => void rescope($, { sort: nextSort(scope.sort ?? 'number-desc') })}
             />
-            <Button key="refresh" label="Refresh" plain onPress={() => void rescope($, {})} />
+            <Button key="refresh" label="↻" plain onPress={() => void rescope($, {})} />
+            <Button
+              key="toggle-filters"
+              label={areFiltersShown ? 'Filter ▾' : applied.length > 0 ? `Filter ▸ ${applied.length}` : 'Filter ▸'}
+              plain
+              onPress={() => void update($, filtersOpen, isShown => !isShown)}
+            />
           </Box>
         </Box>
-        <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {FILTERS.map(one => (
-            <Button
-              key={`filter:${one.id}`}
-              label={one.id === 'assigned' && assigned > 0 ? `${one.label} · ${assigned}` : one.label}
-              variant={one.id === scope.filter ? 'primary' : 'secondary'}
-              onPress={() => void rescope($, { filter: one.id as IssueFilter })}
-            />
-          ))}
-        </Box>
-        {groups.length > 0 && (
-          <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-            {[{ name: '', label: 'All' }, ...groups.map(one => ({ name: one.name, label: one.name }))].map(one => (
-              <Button
-                key={`run-group:${one.name === '' ? '*' : one.name}`}
-                label={one.label}
-                variant={one.name === (scope.run ?? '') ? 'primary' : 'secondary'}
-                onPress={() => void rescope($, { run: one.name })}
-              />
-            ))}
+        {status.kind === 'error' && (
+          <Text dimColor wrap="wrap">
+            {status.message}
+          </Text>
+        )}
+        {!areFiltersShown && applied.length > 0 && (
+          <Box flexDirection="row" columnGap={2}>
+            <Text dimColor wrap="truncate-end">
+              {applied.join(' · ')}
+            </Text>
+            <Button key="clear-all" label="Clear" plain onPress={() => void clearAll($)} />
           </Box>
         )}
-        {(Input !== undefined || Select !== undefined) && (
+        {areFiltersShown && (
           <Box flexDirection="column">
+            <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+              {FILTERS.map(one => (
+                <Button
+                  key={`filter:${one.id}`}
+                  label={one.id === 'assigned' && assigned > 0 ? `${one.label} · ${assigned}` : one.label}
+                  variant={one.id === scope.filter ? 'primary' : 'secondary'}
+                  onPress={() => void rescope($, { filter: one.id as IssueFilter })}
+                />
+              ))}
+            </Box>
+            {groups.length > 0 && (
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                {[{ name: '', label: 'All' }, ...groups.map(one => ({ name: one.name, label: one.name }))].map(one => (
+                  <Button
+                    key={`run-group:${one.name === '' ? '*' : one.name}`}
+                    label={one.label}
+                    variant={one.name === (scope.run ?? '') ? 'primary' : 'secondary'}
+                    onPress={() => void rescope($, { run: one.name })}
+                  />
+                ))}
+              </Box>
+            )}
             {Input !== undefined && (
               <Input
                 key="issue-search"
@@ -860,25 +907,16 @@ export const register: Register = (on, options) => {
                 onSelect={value => void rescope($, { label: value })}
               />
             )}
+            {narrowing.length > 0 && (
+              <Box flexDirection="row" columnGap={2}>
+                <Text dimColor wrap="truncate-end">
+                  {narrowing.join(', ')}
+                </Text>
+                <Button key="clear-filters" label="Clear" plain onPress={() => void clearSearch($)} />
+              </Box>
+            )}
           </Box>
         )}
-        <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-          {status.kind === 'loading' || status.kind === 'empty' ? (
-            busy(list.length > 0 ? `${counted} · refreshing…` : 'Loading issues…')
-          ) : (
-            <Text dimColor wrap="wrap">
-              {status.kind === 'error' ? status.message : list.length > 0 ? counted : `No issues ${noun}.`}
-            </Text>
-          )}
-          {narrowing.length > 0 && (
-            <Box flexDirection="row" columnGap={2}>
-              <Text dimColor wrap="truncate-end">
-                {narrowing.join(', ')}
-              </Text>
-              <Button key="clear-filters" label="Clear" plain onPress={() => void clearSearch($)} />
-            </Box>
-          )}
-        </Box>
       </Box>
     )
 

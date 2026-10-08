@@ -110,6 +110,7 @@ declare module 'claude-code' {
       open: OpenIssue | null
       active: ActiveIssue | null
       reading: ReaderIssue | null
+      filtersOpen: boolean
     }
   }
 }
