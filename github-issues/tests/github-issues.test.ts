@@ -23,6 +23,7 @@ import {
   labelDot,
   labelInk,
   labelOptions,
+  milestoneOptions,
   labelPills,
   matchesQuery,
   newlyAssigned,
@@ -98,7 +99,10 @@ function issuesPage(mine: readonly number[], extraLabels = 0, bulky = 0, runLabe
           url: `https://github.com/acme/widgets/issues/${number}`,
         })),
       },
-      repository: { labels: { nodes: [{ name: 'bug', color: 'd73a4a' }, { name: 'ui', color: 'a2eeef' }, ...more] } },
+      repository: {
+        labels: { nodes: [{ name: 'bug', color: 'd73a4a' }, { name: 'ui', color: 'a2eeef' }, ...more] },
+        milestones: { nodes: [{ title: '1 · Groundwork', issues: { totalCount: 6 } }, { title: 'Later', issues: { totalCount: 2 } }] },
+      },
     },
   }
 }
@@ -431,6 +435,27 @@ describe('issues', () => {
     await ui.press({ key: 'clear-all' })
     expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
     expect(await ui.find({ key: 'clear-all' })).toBeUndefined()
+  })
+
+  test('the milestone picker lists the open milestones and narrows the search', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await showFilters(ui)
+
+    const picker = await ui.find({ key: 'milestone-filter' })
+    expect(picker?.props.options).toEqual([
+      { value: '', label: 'Any milestone' },
+      { value: '1 · Groundwork', label: '1 · Groundwork (6)' },
+      { value: 'Later', label: 'Later (2)' },
+    ])
+    await ui.select({ key: 'milestone-filter', value: '1 · Groundwork' })
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open milestone:"1 · Groundwork" sort:created-desc')
+
+    await ui.press({ key: 'toggle-filters' })
+    expect(await ui.find({ type: 'Text', text: 'milestone 1 · Groundwork' })).toBeDefined()
+    await ui.press({ key: 'clear-all' })
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
   })
 
   test('tabs search for the matching issues', async ($, on) => {
@@ -1165,5 +1190,12 @@ describe('lib', () => {
     expect(thread.comments.map(one => one.author)).toEqual(['bob', ''])
     expect(fitThread(thread, 50)).toMatchObject({ body: 'Body', cut: 1 })
     expect(fitThread(thread).cut).toBe(0)
+  })
+
+  test('milestoneOptions offers any milestone, then each with its open issues', () => {
+    expect(milestoneOptions([])).toEqual([{ key: 'milestone:any', value: '', label: 'Any milestone' }])
+    expect(searchQuery('a/b', 'open', '', '', [], 'number-desc', 'Say "hi"')).toBe(
+      'repo:a/b is:issue is:open milestone:"Say hi" sort:created-desc',
+    )
   })
 })

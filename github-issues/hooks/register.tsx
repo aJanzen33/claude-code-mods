@@ -43,6 +43,7 @@ import {
   issuesArgs,
   labelDot,
   labelOptions,
+  milestoneOptions,
   labelPills,
   matchesQuery,
   meta,
@@ -83,11 +84,12 @@ let browserSurface: string | undefined
 
 const EMPTY_PAGE: IssuesPane = {
   repo: null,
-  scope: { filter: 'open', search: '', label: '', run: '', sort: 'number-desc' },
+  scope: { filter: 'open', search: '', label: '', run: '', sort: 'number-desc', milestone: '' },
   load: { kind: 'empty' },
   issues: [],
   total: 0,
   labels: [],
+  milestones: [],
   assigned: 0,
 }
 
@@ -272,7 +274,7 @@ async function loadIssues($: EngineInterface, isQuiet: boolean): Promise<void> {
   // State kept from before 0.6.0 has no run filter.
   const runs = groups.find(one => one.name === (current.scope.run ?? ''))?.commands ?? []
   const sort = current.scope.sort ?? 'number-desc'
-  const listed = await gh($, issuesArgs(target, filter, search, label, runs, sort))
+  const listed = await gh($, issuesArgs(target, filter, search, label, runs, sort, current.scope.milestone ?? ''))
   if (mine !== generation) return
   const keepsList = isQuiet && current.load.kind === 'ready'
   if (!listed.ok) {
@@ -295,6 +297,7 @@ async function loadIssues($: EngineInterface, isQuiet: boolean): Promise<void> {
     issues: parsed.issues,
     total: parsed.total,
     labels: parsed.labels,
+    milestones: parsed.milestones,
     assigned: parsed.assigned.total,
   })
 }
@@ -350,12 +353,12 @@ async function submitSearch($: EngineInterface, text: string): Promise<void> {
 /** Back to every open issue: no tab but Open, no run filter, search or label. */
 async function clearAll($: EngineInterface): Promise<void> {
   await setSearchDraft($, '')
-  await rescope($, { filter: 'open', run: '', search: '', label: '' })
+  await rescope($, { filter: 'open', run: '', search: '', label: '', milestone: '' })
 }
 
 async function clearSearch($: EngineInterface): Promise<void> {
   await setSearchDraft($, '')
-  await rescope($, { search: '', label: '' })
+  await rescope($, { search: '', label: '', milestone: '' })
 }
 
 /** Switches the pane to the repository picker and loads its choices. */
@@ -759,6 +762,8 @@ export const register: Register = (on, options) => {
     }
 
     const { repo: shown, scope, load: status, issues: list, total, labels, assigned } = await read($, page)
+    // State kept from before 0.12.0 has no milestones.
+    const milestones = (await read($, page)).milestones ?? []
     const opened = await read($, open)
     const working = await read($, active)
     const draft = await read($, searchDraft)
@@ -767,6 +772,7 @@ export const register: Register = (on, options) => {
     const narrowing = [
       scope.search === '' ? '' : `matching "${scope.search}"`,
       scope.label === '' ? '' : `label ${scope.label}`,
+      (scope.milestone ?? '') === '' ? '' : `milestone ${scope.milestone}`,
     ].filter(Boolean)
     const labelChoices = labelOptions(labels, list, scope.label)
     const areFiltersShown = await read($, filtersOpen)
@@ -905,6 +911,15 @@ export const register: Register = (on, options) => {
                 value={scope.label}
                 options={labelChoices}
                 onSelect={value => void rescope($, { label: value })}
+              />
+            )}
+            {Select !== undefined && milestones.length > 0 && (
+              <Select
+                key="milestone-filter"
+                label="Milestone"
+                value={scope.milestone ?? ''}
+                options={milestoneOptions(milestones)}
+                onSelect={value => void rescope($, { milestone: value })}
               />
             )}
             {narrowing.length > 0 && (

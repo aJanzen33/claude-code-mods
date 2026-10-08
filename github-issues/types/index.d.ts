@@ -47,7 +47,10 @@ export type RepoChoice = {
 export type IssueSort = 'number-desc' | 'number-asc' | 'updated-desc'
 
 /** `run` names the run filter shown (a RunGroup's name), '' for all. */
-export type IssueScope = { filter: IssueFilter; search: string; label: string; run: string; sort: IssueSort }
+export type IssueScope = { filter: IssueFilter; search: string; label: string; run: string; sort: IssueSort; milestone: string }
+
+/** An open milestone of the repository and how many open issues it holds. */
+export type MilestoneChoice = { title: string; open: number }
 
 /** A run filter: a name and the run:<command> labels it lists. */
 export type RunGroup = { name: string; commands: string[] }
@@ -63,6 +66,7 @@ export type IssuesPane = {
   issues: Issue[]
   total: number
   labels: IssueLabel[]
+  milestones: MilestoneChoice[]
   assigned: number
 }
 

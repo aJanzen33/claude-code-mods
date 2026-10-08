@@ -1,4 +1,4 @@
-import type { Issue, IssueComment, IssueDetail, IssueFilter, IssueLabel, IssueSort, IssueThread, LinkedPr, RepoChoice, RunGroup } from '../types'
+import type { Issue, IssueComment, IssueDetail, IssueFilter, IssueLabel, IssueSort, IssueThread, LinkedPr, MilestoneChoice, RepoChoice, RunGroup } from '../types'
 
 export const LIMIT = 40
 export const REPO_LIMIT = 30
@@ -49,7 +49,8 @@ const ISSUES_QUERY =
   'query($q: String!, $mine: String!, $owner: String!, $name: String!) { ' +
   `list: search(query: $q, type: ISSUE, first: ${LIMIT}) { issueCount nodes { ... on Issue { ${ISSUE_FIELDS} } } } ` +
   `${MINE_FIELD} ` +
-  'repository(owner: $owner, name: $name) { labels(first: 100, orderBy: {field: NAME, direction: ASC}) { nodes { name color } } } }'
+  'repository(owner: $owner, name: $name) { labels(first: 100, orderBy: {field: NAME, direction: ASC}) { nodes { name color } } ' +
+  'milestones(first: 50, states: OPEN, orderBy: {field: NUMBER, direction: ASC}) { nodes { title issues(states: OPEN) { totalCount } } } } }'
 
 const MINE_QUERY = `query($mine: String!) { ${MINE_FIELD} }`
 
@@ -78,6 +79,7 @@ export function searchQuery(
   label = '',
   runs: readonly string[] = [],
   sort: IssueSort = 'updated-desc',
+  milestone = '',
 ): string {
   const state = {
     open: 'is:open',
@@ -88,6 +90,7 @@ export function searchQuery(
   const parts = [`repo:${repo}`, 'is:issue', state]
   if (label !== '') parts.push(`label:"${label.replace(/"/g, '')}"`)
   // Comma-separated label values match any of them.
+  if (milestone !== '') parts.push(`milestone:"${milestone.replace(/"/g, '')}"`)
   if (runs.length > 0) parts.push(`label:${runs.map(command => `"${RUN_LABEL}${command}"`).join(',')}`)
   if (text.trim() !== '') parts.push(text.trim())
   parts.push(SORTS.find(one => one.id === sort)?.query ?? 'sort:updated-desc')
@@ -108,13 +111,14 @@ export function issuesArgs(
   label = '',
   runs: readonly string[] = [],
   sort: IssueSort = 'updated-desc',
+  milestone = '',
 ): string[] {
   const [owner = '', name = ''] = repo.split('/')
 
   return [
     'api', 'graphql',
     '-f', `query=${ISSUES_QUERY}`,
-    '-f', `q=${searchQuery(repo, filter, text, label, runs, sort)}`,
+    '-f', `q=${searchQuery(repo, filter, text, label, runs, sort, milestone)}`,
     '-f', `mine=${mineQuery(repo)}`,
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
@@ -416,6 +420,7 @@ export type IssuesPage = {
   total: number
   assigned: Assigned
   labels: IssueLabel[]
+  milestones: MilestoneChoice[]
 }
 
 function nodes<T>(list: Nodes<T> | undefined): T[] {
@@ -484,7 +489,14 @@ function toAssigned(raw: RawSearch | undefined): Assigned {
 /** What the issues request answered: the page, how many match, the person's assigned issues, the labels. */
 export function parseIssuesPage(stdout: string): IssuesPage {
   const raw = JSON.parse(stdout) as {
-    data?: { list?: RawSearch; mine?: RawSearch; repository?: { labels?: Nodes<{ name?: string; color?: string }> } | null }
+    data?: {
+      list?: RawSearch
+      mine?: RawSearch
+      repository?: {
+        labels?: Nodes<{ name?: string; color?: string }>
+        milestones?: Nodes<{ title?: string; issues?: { totalCount?: number } }>
+      } | null
+    }
   }
   const list = raw.data?.list
 
@@ -499,7 +511,18 @@ export function parseIssuesPage(stdout: string): IssuesPage {
     labels: nodes(raw.data?.repository?.labels ?? undefined)
       .filter(label => label.name)
       .map(label => ({ name: label.name ?? '', color: label.color ?? '' })),
+    milestones: nodes(raw.data?.repository?.milestones ?? undefined)
+      .filter(milestone => milestone.title)
+      .map(milestone => ({ title: milestone.title ?? '', open: milestone.issues?.totalCount ?? 0 })),
   }
+}
+
+/** The milestone picker's options: any milestone, then each open one with its open issues, in order. */
+export function milestoneOptions(milestones: readonly MilestoneChoice[]): { key: string; value: string; label: string }[] {
+  return [
+    { key: 'milestone:any', value: '', label: 'Any milestone' },
+    ...milestones.map(one => ({ key: `milestone:${one.title}`, value: one.title, label: `${one.title} (${one.open})` })),
+  ]
 }
 
 /** What the background check answered: the person's assigned issues. */

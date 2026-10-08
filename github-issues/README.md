@@ -32,7 +32,7 @@ In the picker, repositories are grouped by owner. Type in the filter box to narr
 
 ## The header
 
-One row: the repository and how many issues are loaded, then **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh) and **Filter ▸**. The filters (tabs, run filters, search, label) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).
+One row: the repository and how many issues are loaded, then **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh) and **Filter ▸**. The filters (tabs, run filters, search, label and milestone) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).
 
 ## Issue commands
 
@@ -51,6 +51,10 @@ An issue labelled `run:<command>` (`run:implement`, `run:research`) offers that 
 ## Sorting
 
 The button beside **Refresh** steps through the list's order: `#↓` by number, newest first (the default), `#↑` by number, oldest first, and **Updated**, last updated first.
+
+## Milestones
+
+The **Milestone** picker among the filters lists the repository's open milestones in their order, each with its open issues (`1 · Groundwork (6)`), and narrows the list to one.
 
 ## Run filters
 
