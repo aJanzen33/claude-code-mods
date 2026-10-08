@@ -1,6 +1,6 @@
 {
   "name": "github-issues",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A side pane listing the repository's GitHub issues, with one click to have Claude work on one",
   "author": { "name": "Marco Carnevali", "url": "https://github.com/MarcoCarnevali" },
   "repository": "https://github.com/MarcoCarnevali/claude-code-mods",
@@ -13,6 +13,12 @@
       "title": "Issue commands",
       "description": "Slash commands an issue card offers when it has no run:<command> label, comma-separated; a press runs /<command> #<number> <url>. Empty: the card's Work on it button.",
       "default": "implement, wayfinder"
+    },
+    "runGroups": {
+      "type": "string",
+      "title": "Run filters",
+      "description": "Filters over the run:<command> labels, as Name: command, command; Name: command. Each shows as a button above the list beside All. Empty: no such filters.",
+      "default": "Plan: wayfinder, research; Implement: implement"
     },
     "background": {
       "type": "string",

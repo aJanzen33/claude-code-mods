@@ -28,6 +28,7 @@ import {
   pickKey,
   pickPr,
   reposArgs,
+  runGroups,
   searchQuery,
   spinnerFrame,
   textWidth,
@@ -553,6 +554,35 @@ describe('issue commands', () => {
     expect(ran).toHaveLength(1)
   })
 
+  test('the run filters search for their labels; All drops them', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'run-group:*' }))?.props).toMatchObject({ variant: 'primary' })
+    await ui.press({ key: 'run-group:Plan' })
+    expect(fake.searches.at(-1)).toBe(
+      'repo:acme/widgets is:issue is:open label:"run:wayfinder","run:research" sort:updated-desc',
+    )
+    expect((await ui.find({ key: 'run-group:Plan' }))?.props).toMatchObject({ variant: 'primary' })
+
+    await ui.press({ key: 'filter:closed' })
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed label:"run:wayfinder","run:research" sort:updated-desc')
+
+    await ui.press({ key: 'run-group:Implement' })
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed label:"run:implement" sort:updated-desc')
+
+    await ui.press({ key: 'run-group:*' })
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed sort:updated-desc')
+  })
+
+  test('with no run filters set, the row is not drawn', { options: { runGroups: '' } }, async ($, on) => {
+    fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'run-group:*' })).toBeUndefined()
+  })
+
   test('a run: label picks the card\'s command and leaves the chips; a card without one offers the setting\'s', async ($, on) => {
     const fake = fakeGitHub(on)
     fake.runLabel = 'run:research'
@@ -942,5 +972,19 @@ describe('lib', () => {
     expect(commandsFor(issue('bug'), configured)).toEqual(['implement', 'wayfinder'])
     expect(commandsFor(issue('run:'), configured)).toEqual(['implement', 'wayfinder'])
     expect(commandsFor(issue(), [])).toEqual([])
+  })
+
+  test('runGroups reads named groups and skips the broken ones', () => {
+    expect(runGroups('Plan: wayfinder, research; Implement: implement')).toEqual([
+      { name: 'Plan', commands: ['wayfinder', 'research'] },
+      { name: 'Implement', commands: ['implement'] },
+    ])
+    expect(runGroups('no colon; : implement; Empty: ; Plan: wayfinder; Plan: research')).toEqual([
+      { name: 'Plan', commands: ['wayfinder'] },
+    ])
+    expect(runGroups('')).toEqual([])
+    expect(searchQuery('a/b', 'open', '', '', ['wayfinder', 'research'])).toBe(
+      'repo:a/b is:issue is:open label:"run:wayfinder","run:research" sort:updated-desc',
+    )
   })
 })

@@ -1,4 +1,4 @@
-import type { Issue, IssueDetail, IssueFilter, IssueLabel, LinkedPr, RepoChoice } from '../types'
+import type { Issue, IssueDetail, IssueFilter, IssueLabel, LinkedPr, RepoChoice, RunGroup } from '../types'
 
 export const LIMIT = 40
 export const REPO_LIMIT = 30
@@ -53,8 +53,8 @@ const ISSUES_QUERY =
 
 const MINE_QUERY = `query($mine: String!) { ${MINE_FIELD} }`
 
-/** The search that lists `repo`'s issues under `filter`, a label and typed text. */
-export function searchQuery(repo: string, filter: IssueFilter, text = '', label = ''): string {
+/** The search that lists `repo`'s issues under `filter`, a label, typed text and any of the `runs` commands' labels. */
+export function searchQuery(repo: string, filter: IssueFilter, text = '', label = '', runs: readonly string[] = []): string {
   const state = {
     open: 'is:open',
     assigned: 'is:open assignee:@me',
@@ -63,6 +63,8 @@ export function searchQuery(repo: string, filter: IssueFilter, text = '', label 
   }[filter]
   const parts = [`repo:${repo}`, 'is:issue', state]
   if (label !== '') parts.push(`label:"${label.replace(/"/g, '')}"`)
+  // Comma-separated label values match any of them.
+  if (runs.length > 0) parts.push(`label:${runs.map(command => `"${RUN_LABEL}${command}"`).join(',')}`)
   if (text.trim() !== '') parts.push(text.trim())
   parts.push('sort:updated-desc')
 
@@ -75,13 +77,13 @@ export function mineQuery(repo: string): string {
 }
 
 /** The `gh` arguments for one request: the list, the person's assigned issues, the labels. */
-export function issuesArgs(repo: string, filter: IssueFilter, text = '', label = ''): string[] {
+export function issuesArgs(repo: string, filter: IssueFilter, text = '', label = '', runs: readonly string[] = []): string[] {
   const [owner = '', name = ''] = repo.split('/')
 
   return [
     'api', 'graphql',
     '-f', `query=${ISSUES_QUERY}`,
-    '-f', `q=${searchQuery(repo, filter, text, label)}`,
+    '-f', `q=${searchQuery(repo, filter, text, label, runs)}`,
     '-f', `mine=${mineQuery(repo)}`,
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
@@ -602,6 +604,25 @@ export function commandsFor(issue: Pick<Issue, 'labels'>, configured: readonly s
   const fromLabels = issueCommands(named.join(','))
 
   return fromLabels.length > 0 ? fromLabels : [...configured]
+}
+
+/**
+ * The run filters the `runGroups` setting names, in its order:
+ * `Plan: wayfinder, research; Implement: implement`. A group with no name or
+ * no command is left out, and so is a name already taken.
+ */
+export function runGroups(setting: string): RunGroup[] {
+  const groups: RunGroup[] = []
+  for (const part of setting.split(';')) {
+    const at = part.indexOf(':')
+    if (at < 0) continue
+    const name = part.slice(0, at).trim()
+    const commands = issueCommands(part.slice(at + 1))
+    if (name === '' || commands.length === 0 || groups.some(one => one.name === name)) continue
+    groups.push({ name, commands })
+  }
+
+  return groups
 }
 
 /** What an issue command runs with: the issue's number and its URL, so the skill can read it. */

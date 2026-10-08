@@ -43,7 +43,11 @@ export type RepoChoice = {
 }
 
 /** What narrows the list: the tab, the search typed, the label picked. */
-export type IssueScope = { filter: IssueFilter; search: string; label: string }
+/** `run` names the run filter shown (a RunGroup's name), '' for all. */
+export type IssueScope = { filter: IssueFilter; search: string; label: string; run: string }
+
+/** A run filter: a name and the run:<command> labels it lists. */
+export type RunGroup = { name: string; commands: string[] }
 
 /**
  * Everything the issue list draws, as one value: a change of tab and its

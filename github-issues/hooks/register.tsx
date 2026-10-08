@@ -7,11 +7,12 @@ import type {
   IssueDetail,
   IssueFilter,
   IssueLabel,
-  IssueView,
   IssuesPane,
+  IssueView,
   OpenIssue,
   RepoChoice,
   RepoPicker,
+  RunGroup,
 } from '../types'
 import {
   FILTERS,
@@ -27,6 +28,7 @@ import {
   issueArgs,
   commandsFor,
   issueCommands,
+  runGroups,
   RUN_LABEL,
   paneBackground,
   issuesArgs,
@@ -60,9 +62,12 @@ const GH_PATHS = ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
 const OPEN_COLOR = '#3fb950'
 const CLOSED_COLOR = '#a371f7'
 
+// The run filters from the settings; register sets them on every load.
+let groups: RunGroup[] = []
+
 const EMPTY_PAGE: IssuesPane = {
   repo: null,
-  scope: { filter: 'open', search: '', label: '' },
+  scope: { filter: 'open', search: '', label: '', run: '' },
   load: { kind: 'empty' },
   issues: [],
   total: 0,
@@ -198,7 +203,7 @@ async function loadIssues($: EngineInterface, isQuiet: boolean): Promise<void> {
   const before = await read($, page)
   const isNewRepo = before.repo !== target
   let current: IssuesPane = isNewRepo
-    ? { ...EMPTY_PAGE, repo: target, scope: { ...EMPTY_PAGE.scope, filter: before.scope.filter } }
+    ? { ...EMPTY_PAGE, repo: target, scope: { ...EMPTY_PAGE.scope, filter: before.scope.filter, run: before.scope.run ?? '' } }
     : before
   if (isNewRepo) {
     await setOpen($, null)
@@ -212,7 +217,9 @@ async function loadIssues($: EngineInterface, isQuiet: boolean): Promise<void> {
   }
 
   const { filter, search, label } = current.scope
-  const listed = await gh($, issuesArgs(target, filter, search, label))
+  // State kept from before 0.6.0 has no run filter.
+  const runs = groups.find(one => one.name === (current.scope.run ?? ''))?.commands ?? []
+  const listed = await gh($, issuesArgs(target, filter, search, label, runs))
   if (mine !== generation) return
   const keepsList = isQuiet && current.load.kind === 'ready'
   if (!listed.ok) {
@@ -480,6 +487,7 @@ async function workOn($: EngineInterface, issue: Issue, command?: string): Promi
 }
 
 export const register: Register = (on, options) => {
+  groups = runGroups(typeof options.runGroups === 'string' ? options.runGroups : '')
   const commands = issueCommands(typeof options.commands === 'string' ? options.commands : '')
   const background = paneBackground(typeof options.background === 'string' ? options.background : '')
 
@@ -727,6 +735,18 @@ export const register: Register = (on, options) => {
             />
           ))}
         </Box>
+        {groups.length > 0 && (
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+            {[{ name: '', label: 'All' }, ...groups.map(one => ({ name: one.name, label: one.name }))].map(one => (
+              <Button
+                key={`run-group:${one.name === '' ? '*' : one.name}`}
+                label={one.label}
+                variant={one.name === (scope.run ?? '') ? 'primary' : 'secondary'}
+                onPress={() => void rescope($, { run: one.name })}
+              />
+            ))}
+          </Box>
+        )}
         {(Input !== undefined || Select !== undefined) && (
           <Box flexDirection="column">
             {Input !== undefined && (

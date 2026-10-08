@@ -36,6 +36,10 @@ Each card offers the slash commands set in **Issue commands** (`github-issues.co
 
 An issue labelled `run:<command>` (`run:implement`, `run:research`) offers that command alone, whatever the setting says; the label shows as its button, not as a chip. Only issues without such a label offer the commands of the setting.
 
+## Run filters
+
+A row of buttons under the tabs narrows the list to issues with certain `run:` labels: **All**, then each group of **Run filters** (`github-issues.runGroups` in `/config`), by default `Plan: wayfinder, research; Implement: implement`. **Plan** lists the issues labelled `run:wayfinder` or `run:research`, **Implement** those labelled `run:implement`. GitHub's search does the narrowing, so it reaches past the loaded page. Empty: no such row.
+
 ## Pane background
 
 **Pane background** (`github-issues.background` in `/config`) paints the pane's body in a color of your own, as `#rrggbb`. Empty keeps Claude Code's own.
