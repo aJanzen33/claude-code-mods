@@ -26,6 +26,7 @@ import {
   isSameRepo,
   issueArgs,
   issueCommands,
+  paneBackground,
   issuesArgs,
   labelDot,
   labelOptions,
@@ -478,6 +479,7 @@ async function workOn($: EngineInterface, issue: Issue, command?: string): Promi
 
 export const register: Register = (on, options) => {
   const commands = issueCommands(typeof options.commands === 'string' ? options.commands : '')
+  const background = paneBackground(typeof options.background === 'string' ? options.background : '')
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -544,6 +546,20 @@ export const register: Register = (on, options) => {
     const Select = 'Select' in table ? table.Select : undefined
     // The terminal's table answers Svg with an element that draws nothing, so ask the surface.
     const Svg = e.surface !== 'terminal' && 'Svg' in table ? table.Svg : undefined
+    // With a background set, the tree sits in a Box of that color filling the pane's body.
+    const paint = (tree: JSX.Element) =>
+      background === null ? (
+        tree
+      ) : (
+        <Box
+          flexDirection="column"
+          width={e.props.bodyColumns}
+          minHeight={e.props.scroll.bodyRows}
+          backgroundColor={background}
+        >
+          {tree}
+        </Box>
+      )
     const now = await $.clock.now()
     const busy = (text: string) => (
       <Box flexDirection="row" columnGap={1} alignItems="center">
@@ -581,7 +597,7 @@ export const register: Register = (on, options) => {
         </Box>
       )
 
-      return (
+      return paint(
         <Box flexDirection="column">
           <Box flexDirection="row" justifyContent="space-between">
             <Text bold>Choose a repository</Text>
@@ -856,7 +872,7 @@ export const register: Register = (on, options) => {
     // The engine refuses a whole tree past its size bound, so cards stop short of it.
     const fitted = fitCards(top, cards)
 
-    return (
+    return paint(
       <Box flexDirection="column">
         {top}
         <Box flexDirection="column" marginTop={1}>

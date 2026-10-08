@@ -595,6 +595,13 @@ export function issueArgs(issue: Pick<Issue, 'number' | 'url'>): string {
   return `#${issue.number} ${issue.url}`
 }
 
+/** The `background` setting as a #rrggbb color, or null for Claude Code's own. */
+export function paneBackground(setting: string): string | null {
+  const color = setting.trim()
+
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : null
+}
+
 /** The prompt "Work on it" submits. */
 export function workPrompt(repo: string, issue: Pick<Issue, 'number' | 'title' | 'url'>): string {
   return [

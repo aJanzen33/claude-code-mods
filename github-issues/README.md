@@ -34,6 +34,10 @@ In the picker, repositories are grouped by owner. Type in the filter box to narr
 
 Each card offers the slash commands set in **Issue commands** (`github-issues.commands` in `/config`), `/implement` and `/wayfinder` by default. A press runs `/<command> #<number> <url>` in this session, once it is idle, and the button shows `◷` while queued and `●` once it runs. Any slash command or skill works, e.g. `implement, wayfinder, mattpocock-skills:tdd`. Leave the setting empty for the card's original **Work on it** button.
 
+## Pane background
+
+**Pane background** (`github-issues.background` in `/config`) paints the pane's body in a color of your own, as `#rrggbb`. Empty keeps Claude Code's own.
+
 ## Assignment alerts
 
 While the pane is open, the mod checks every two minutes which open issues are assigned to you in the repository it's watching: the one you picked, or the session's own. With the pane closed it makes no requests. The first check of a repository is silent and only records the current issues. After that, each newly assigned issue raises a toast. The issue numbers already seen are kept in Claude Code's plugin store, so alerts carry over between sessions.

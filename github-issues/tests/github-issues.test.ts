@@ -13,6 +13,7 @@ import {
   isSameRepo,
   issueArgs,
   issueCommands,
+  paneBackground,
   issuesArgs,
   labelDot,
   labelInk,
@@ -559,6 +560,26 @@ describe('issue commands', () => {
   })
 })
 
+describe('pane background', () => {
+  test('with a background set, the pane body sits in a Box of that color', { options: { background: '#000000' } }, async ($, on) => {
+    fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const boxes = await ui.findAll({ type: 'Box' })
+    expect(boxes.filter(box => box.props.backgroundColor === '#000000')).toHaveLength(1)
+    await ui.unmount()
+  })
+
+  test('left empty, the pane keeps Claude Code\'s own background', async ($, on) => {
+    fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const boxes = await ui.findAll({ type: 'Box' })
+    expect(boxes.filter(box => box.props.backgroundColor !== undefined)).toHaveLength(0)
+    await ui.unmount()
+  })
+})
+
 describe('assignment alerts', () => {
   test('the first look is quiet; a newly assigned issue toasts, and the status line counts them', async ($, on) => {
     const fake = fakeGitHub(on)
@@ -882,5 +903,12 @@ describe('lib', () => {
     expect(issueCommands(' /implement,,implement  mattpocock-skills:tdd bad!name')).toEqual(['implement', 'mattpocock-skills:tdd'])
     expect(issueCommands('')).toEqual([])
     expect(issueArgs({ number: 3, url: 'https://github.com/a/b/issues/3' })).toBe('#3 https://github.com/a/b/issues/3')
+  })
+
+  test('paneBackground takes #rrggbb and nothing else', () => {
+    expect(paneBackground(' #1E1E1E ')).toBe('#1E1E1E')
+    expect(paneBackground('')).toBeNull()
+    expect(paneBackground('black')).toBeNull()
+    expect(paneBackground('#fff')).toBeNull()
   })
 })
