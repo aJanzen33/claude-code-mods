@@ -74,6 +74,8 @@ const TITLE = 'Issues'
 const REFRESH_MS = 2 * 60_000
 const GH_PATHS = ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
 const CMUX_PATHS = ['cmux', '/Applications/cmux.app/Contents/Resources/bin/cmux']
+// The default browser's openers, tried in turn: macOS, Linux, Windows.
+const OPENERS: readonly string[][] = [['open'], ['xdg-open'], ['rundll32', 'url.dll,FileProtocolHandler']]
 // GitHub's open and closed issue colors; both read on a light pane and on a dark one.
 const OPEN_COLOR = '#3fb950'
 // A faint gray between issues, on a light pane and on a dark one.
@@ -206,7 +208,7 @@ async function tryRun($: EngineInterface, argv: string[]): Promise<{ ok: boolean
 /**
  * Shows `url` in a cmux browser split beside the terminal, the one ↗ opened
  * before while it is still open; with `browser` set to system, or outside
- * cmux, in the default browser.
+ * cmux, in the default browser, on macOS, Linux or Windows.
  */
 async function openInBrowser($: EngineInterface, url: string): Promise<void> {
   if (browser === 'cmux') {
@@ -222,7 +224,10 @@ async function openInBrowser($: EngineInterface, url: string): Promise<void> {
       }
     }
   }
-  if (!(await tryRun($, ['open', url])).ok) $.ui.toast(`Could not open ${url}.`)
+  for (const opener of OPENERS) {
+    if ((await tryRun($, [...opener, url])).ok) return
+  }
+  $.ui.toast(`Could not open ${url}.`)
 }
 
 async function detectRepo($: EngineInterface): Promise<string | null> {

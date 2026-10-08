@@ -189,6 +189,8 @@ type Fake = {
   runLabel: string | undefined
   // Whether cmux answers; false stands for a terminal outside cmux.
   hasCmux: boolean
+  // The default browser's opener this system has: open on macOS, rundll32 on Windows.
+  opener: string
   // The argv of every run that was not gh.
   opened: string[][]
   // The id of every pane opened.
@@ -213,6 +215,7 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     failing: false,
     runLabel: undefined,
     hasCmux: true,
+    opener: 'open',
     opened: [],
     panes: [],
   }
@@ -250,9 +253,12 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
   on('process.run', async ($, e) => {
     fake.calls.push([...e.argv])
     const [program = '', command, verb] = e.argv
-    if (program.endsWith('cmux') || program === 'open') {
+    if (program.endsWith('cmux') || ['open', 'xdg-open', 'rundll32'].includes(program)) {
       fake.opened.push([...e.argv])
-      if (program === 'open') return ran('')
+      if (!program.endsWith('cmux')) {
+        if (program !== fake.opener) throw new Error(`${program}: not found`)
+        return ran('')
+      }
       if (!fake.hasCmux) return ran('', 1, 'cmux is not running')
       if (command === 'browser' && verb === 'open') return ran('OK surface=surface:7 pane=pane:3 placement=split')
       return ran('OK')
@@ -786,6 +792,22 @@ describe('open in browser', () => {
 
     await ui.press({ key: 'open:42' })
     expect(fake.opened.at(-1)).toEqual(['open', 'https://github.com/acme/widgets/issues/42'])
+  })
+
+  test('on Windows, outside cmux, ↗ falls through to rundll32', async ($, on) => {
+    const fake = fakeGitHub(on)
+    fake.hasCmux = false
+    fake.opener = 'rundll32'
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await ui.press({ key: 'open:42' })
+    expect(fake.opened.slice(-3)).toEqual([
+      ['open', 'https://github.com/acme/widgets/issues/42'],
+      ['xdg-open', 'https://github.com/acme/widgets/issues/42'],
+      ['rundll32', 'url.dll,FileProtocolHandler', 'https://github.com/acme/widgets/issues/42'],
+    ])
+    expect(fake.toasts).not.toContain('Could not open https://github.com/acme/widgets/issues/42.')
   })
 
   test('set to system, ↗ goes straight to the default browser', { options: { browser: 'system' } }, async ($, on) => {
