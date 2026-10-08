@@ -43,8 +43,11 @@ export type RepoChoice = {
 }
 
 /** What narrows the list: the tab, the search typed, the label picked. */
+/** How the list is ordered: by number (the order issues were opened in) or by last update. */
+export type IssueSort = 'number-desc' | 'number-asc' | 'updated-desc'
+
 /** `run` names the run filter shown (a RunGroup's name), '' for all. */
-export type IssueScope = { filter: IssueFilter; search: string; label: string; run: string }
+export type IssueScope = { filter: IssueFilter; search: string; label: string; run: string; sort: IssueSort }
 
 /** A run filter: a name and the run:<command> labels it lists. */
 export type RunGroup = { name: string; commands: string[] }

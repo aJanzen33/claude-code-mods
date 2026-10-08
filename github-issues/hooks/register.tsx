@@ -28,6 +28,8 @@ import {
   issueArgs,
   commandsFor,
   issueCommands,
+  nextSort,
+  SORTS,
   runGroups,
   RUN_LABEL,
   paneBackground,
@@ -67,7 +69,7 @@ let groups: RunGroup[] = []
 
 const EMPTY_PAGE: IssuesPane = {
   repo: null,
-  scope: { filter: 'open', search: '', label: '', run: '' },
+  scope: { filter: 'open', search: '', label: '', run: '', sort: 'number-desc' },
   load: { kind: 'empty' },
   issues: [],
   total: 0,
@@ -203,7 +205,7 @@ async function loadIssues($: EngineInterface, isQuiet: boolean): Promise<void> {
   const before = await read($, page)
   const isNewRepo = before.repo !== target
   let current: IssuesPane = isNewRepo
-    ? { ...EMPTY_PAGE, repo: target, scope: { ...EMPTY_PAGE.scope, filter: before.scope.filter, run: before.scope.run ?? '' } }
+    ? { ...EMPTY_PAGE, repo: target, scope: { ...EMPTY_PAGE.scope, filter: before.scope.filter, run: before.scope.run ?? '', sort: before.scope.sort ?? 'number-desc' } }
     : before
   if (isNewRepo) {
     await setOpen($, null)
@@ -219,7 +221,8 @@ async function loadIssues($: EngineInterface, isQuiet: boolean): Promise<void> {
   const { filter, search, label } = current.scope
   // State kept from before 0.6.0 has no run filter.
   const runs = groups.find(one => one.name === (current.scope.run ?? ''))?.commands ?? []
-  const listed = await gh($, issuesArgs(target, filter, search, label, runs))
+  const sort = current.scope.sort ?? 'number-desc'
+  const listed = await gh($, issuesArgs(target, filter, search, label, runs, sort))
   if (mine !== generation) return
   const keepsList = isQuiet && current.load.kind === 'ready'
   if (!listed.ok) {
@@ -722,6 +725,12 @@ export const register: Register = (on, options) => {
           </Box>
           <Box flexDirection="row" columnGap={2} flexShrink={0}>
             <Button key="switch" label="Switch repo" plain onPress={() => void showRepos($)} />
+            <Button
+              key="sort"
+              label={SORTS.find(one => one.id === (scope.sort ?? 'number-desc'))?.label ?? '#↓'}
+              plain
+              onPress={() => void rescope($, { sort: nextSort(scope.sort ?? 'number-desc') })}
+            />
             <Button key="refresh" label="Refresh" plain onPress={() => void rescope($, {})} />
           </Box>
         </Box>

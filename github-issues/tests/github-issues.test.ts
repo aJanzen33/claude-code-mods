@@ -14,6 +14,7 @@ import {
   isSameRepo,
   issueArgs,
   issueCommands,
+  nextSort,
   paneBackground,
   issuesArgs,
   labelDot,
@@ -373,11 +374,11 @@ describe('issues', () => {
 
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'filter:assigned' })
-    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open assignee:@me sort:updated-desc')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open assignee:@me sort:created-desc')
     expect(await ui.find({ type: 'Text', text: /^2 assigned to you$/ })).toBeDefined()
 
     await ui.press({ key: 'filter:closed' })
-    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed sort:updated-desc')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed sort:created-desc')
   })
 
   test('the search box and the label picker narrow the list; Clear resets both', async ($, on) => {
@@ -387,15 +388,15 @@ describe('issues', () => {
     for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
       const ui = await $.ui.mount({ ...PANE, surface })
       await ui.input({ key: 'issue-search', text: 'crash' })
-      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open crash sort:updated-desc')
+      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open crash sort:created-desc')
       expect(await ui.find({ type: 'Text', text: /^matching "crash"$/ })).toBeDefined()
 
       await ui.select({ key: 'label-filter', value: 'bug' })
-      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open label:"bug" crash sort:updated-desc')
+      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open label:"bug" crash sort:created-desc')
       expect(await ui.find({ type: 'Text', text: 'matching "crash", label bug' })).toBeDefined()
 
       await ui.press({ key: 'clear-filters' })
-      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:updated-desc')
+      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
       expect(await ui.find({ key: 'clear-filters' })).toBeUndefined()
       await ui.unmount()
     }
@@ -554,6 +555,24 @@ describe('issue commands', () => {
     expect(ran).toHaveLength(1)
   })
 
+  test('the sort button steps from number descending to ascending to last update', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'sort' }))?.text).toBe('#↓')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
+    await ui.press({ key: 'sort' })
+    expect((await ui.find({ key: 'sort' }))?.text).toBe('#↑')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-asc')
+    await ui.press({ key: 'sort' })
+    expect((await ui.find({ key: 'sort' }))?.text).toBe('Updated')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:updated-desc')
+    await ui.press({ key: 'sort' })
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
+    expect(nextSort('updated-desc')).toBe('number-desc')
+  })
+
   test('the run filters search for their labels; All drops them', async ($, on) => {
     const fake = fakeGitHub(on)
     await slashIssues($, '.')
@@ -562,18 +581,18 @@ describe('issue commands', () => {
     expect((await ui.find({ key: 'run-group:*' }))?.props).toMatchObject({ variant: 'primary' })
     await ui.press({ key: 'run-group:Plan' })
     expect(fake.searches.at(-1)).toBe(
-      'repo:acme/widgets is:issue is:open label:"run:wayfinder","run:research" sort:updated-desc',
+      'repo:acme/widgets is:issue is:open label:"run:wayfinder","run:research" sort:created-desc',
     )
     expect((await ui.find({ key: 'run-group:Plan' }))?.props).toMatchObject({ variant: 'primary' })
 
     await ui.press({ key: 'filter:closed' })
-    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed label:"run:wayfinder","run:research" sort:updated-desc')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed label:"run:wayfinder","run:research" sort:created-desc')
 
     await ui.press({ key: 'run-group:Implement' })
-    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed label:"run:implement" sort:updated-desc')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed label:"run:implement" sort:created-desc')
 
     await ui.press({ key: 'run-group:*' })
-    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed sort:updated-desc')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed sort:created-desc')
   })
 
   test('with no run filters set, the row is not drawn', { options: { runGroups: '' } }, async ($, on) => {

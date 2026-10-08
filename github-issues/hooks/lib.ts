@@ -1,4 +1,4 @@
-import type { Issue, IssueDetail, IssueFilter, IssueLabel, LinkedPr, RepoChoice, RunGroup } from '../types'
+import type { Issue, IssueDetail, IssueFilter, IssueLabel, IssueSort, LinkedPr, RepoChoice, RunGroup } from '../types'
 
 export const LIMIT = 40
 export const REPO_LIMIT = 30
@@ -53,8 +53,32 @@ const ISSUES_QUERY =
 
 const MINE_QUERY = `query($mine: String!) { ${MINE_FIELD} }`
 
-/** The search that lists `repo`'s issues under `filter`, a label, typed text and any of the `runs` commands' labels. */
-export function searchQuery(repo: string, filter: IssueFilter, text = '', label = '', runs: readonly string[] = []): string {
+/**
+ * The orders the sort button steps through, first the default. Issue numbers
+ * count up as issues are opened, so GitHub's `created` order is number order.
+ */
+export const SORTS: readonly { id: IssueSort; label: string; query: string }[] = [
+  { id: 'number-desc', label: '#↓', query: 'sort:created-desc' },
+  { id: 'number-asc', label: '#↑', query: 'sort:created-asc' },
+  { id: 'updated-desc', label: 'Updated', query: 'sort:updated-desc' },
+]
+
+/** The order after `sort` on the sort button, back to the first after the last. */
+export function nextSort(sort: IssueSort): IssueSort {
+  const at = SORTS.findIndex(one => one.id === sort)
+
+  return SORTS[(at + 1) % SORTS.length]!.id
+}
+
+/** The search that lists `repo`'s issues under `filter`, a label, typed text and any of the `runs` commands' labels, in `sort` order. */
+export function searchQuery(
+  repo: string,
+  filter: IssueFilter,
+  text = '',
+  label = '',
+  runs: readonly string[] = [],
+  sort: IssueSort = 'updated-desc',
+): string {
   const state = {
     open: 'is:open',
     assigned: 'is:open assignee:@me',
@@ -66,7 +90,7 @@ export function searchQuery(repo: string, filter: IssueFilter, text = '', label 
   // Comma-separated label values match any of them.
   if (runs.length > 0) parts.push(`label:${runs.map(command => `"${RUN_LABEL}${command}"`).join(',')}`)
   if (text.trim() !== '') parts.push(text.trim())
-  parts.push('sort:updated-desc')
+  parts.push(SORTS.find(one => one.id === sort)?.query ?? 'sort:updated-desc')
 
   return parts.join(' ')
 }
@@ -77,13 +101,20 @@ export function mineQuery(repo: string): string {
 }
 
 /** The `gh` arguments for one request: the list, the person's assigned issues, the labels. */
-export function issuesArgs(repo: string, filter: IssueFilter, text = '', label = '', runs: readonly string[] = []): string[] {
+export function issuesArgs(
+  repo: string,
+  filter: IssueFilter,
+  text = '',
+  label = '',
+  runs: readonly string[] = [],
+  sort: IssueSort = 'updated-desc',
+): string[] {
   const [owner = '', name = ''] = repo.split('/')
 
   return [
     'api', 'graphql',
     '-f', `query=${ISSUES_QUERY}`,
-    '-f', `q=${searchQuery(repo, filter, text, label, runs)}`,
+    '-f', `q=${searchQuery(repo, filter, text, label, runs, sort)}`,
     '-f', `mine=${mineQuery(repo)}`,
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
