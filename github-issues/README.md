@@ -32,7 +32,7 @@ In the picker, repositories are grouped by owner. Type in the filter box to narr
 
 ## The header
 
-One row: the repository and how many issues are loaded, then **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh) and **Filter ▸**. The filters (tabs, run filters, search, label and milestone) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).
+One row: the repository and how many issues are loaded, then **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh), **⇥** and **Filter ▸**. **⇥** folds the pane to a slim strip – each issue's number in its run color and the start of its title – and asks Claude Code for 24 columns; **⇤** widens it again. A width you dragged the pane to wins over both. The filters (tabs, run filters, search, label and milestone) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).
 
 ## The list
 

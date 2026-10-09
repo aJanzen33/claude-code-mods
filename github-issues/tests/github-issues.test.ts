@@ -195,6 +195,8 @@ type Fake = {
   opened: string[][]
   // The id of every pane opened.
   panes: string[]
+  // The width each open asked for; null for Claude Code's share.
+  widths: (number | null)[]
 }
 
 /** Fakes the surface, the session's git remote and the `gh` CLI. */
@@ -218,11 +220,13 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     opener: 'open',
     opened: [],
     panes: [],
+    widths: [],
   }
 
   mock.store(on)
   on('ui.open', ($, e) => {
     fake.panes.push(e.id)
+    fake.widths.push(e.columns ?? null)
 
     return { value: { isPlaced: true } }
   })
@@ -467,6 +471,25 @@ describe('issues', () => {
     expect(await ui.find({ type: 'Text', text: 'milestone 1 · Groundwork' })).toBeDefined()
     await ui.press({ key: 'clear-all' })
     expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
+  })
+
+  test('⇥ folds the pane to a slim strip of numbers and titles, ⇤ widens it again', async ($, on) => {
+    const fake = fakeGitHub(on)
+    await slashIssues($, '.')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+    await ui.press({ key: 'narrow' })
+    expect(fake.widths.at(-1)).toBe(24)
+    expect(await ui.find({ key: 'toggle-filters' })).toBeUndefined()
+    expect(await ui.find({ key: 'slim:42' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'Crash on launch' })).toBeDefined()
+
+    await slashIssues($, '.')
+    expect(fake.widths.at(-1)).toBe(24)
+
+    await ui.press({ key: 'widen' })
+    expect(fake.widths.at(-1)).toBeNull()
+    expect(await ui.find({ key: 'toggle-filters' })).toBeDefined()
   })
 
   test('tabs search for the matching issues', async ($, on) => {

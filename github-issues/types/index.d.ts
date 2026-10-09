@@ -115,6 +115,7 @@ declare module 'claude-code' {
       active: ActiveIssue | null
       reading: ReaderIssue | null
       filtersOpen: boolean
+      narrow: boolean
     }
   }
 }
