@@ -347,14 +347,28 @@ export const SPINNER_SVG =
   '@keyframes s{to{transform:rotate(360deg)}}</style>' +
   '<circle class="t" cx="7" cy="7" r="5.5"/><circle class="a" cx="7" cy="7" r="5.5"/></svg>'
 
-/** How many options a `Select` may hold: the engine refuses the whole tree past this. */
-export const SELECT_LIMIT = 64
+/** The `version` a plugin.json states, or null. */
+export function manifestVersion(text: string): string | null {
+  try {
+    const version = (JSON.parse(text) as { version?: unknown }).version
+
+    return typeof version === 'string' && version !== '' ? version : null
+  } catch {
+    return null
+  }
+}
+
+/** How many label buttons the row offers in all, folded out. */
+export const LABEL_LIMIT = 64
+
+/** How many labels the row shows before its `+n` button folds out the rest. */
+export const LABEL_CHIPS = 8
 
 /**
- * The label picker's options: "Any label", the chosen label, then the labels
- * the loaded issues use most, then the rest by name, `SELECT_LIMIT` in all.
+ * The label buttons: "Any", the chosen label, then the labels the loaded
+ * issues use most, then the rest by name, `LABEL_LIMIT` in all.
  */
-export function labelOptions(
+export function labelChips(
   labels: readonly IssueLabel[],
   issues: readonly Pick<Issue, 'labels'>[],
   current: string,
@@ -367,10 +381,10 @@ export function labelOptions(
   const ranked = names
     .filter(name => name !== current)
     .sort((a, b) => (uses.get(b) ?? 0) - (uses.get(a) ?? 0) || a.localeCompare(b))
-  const picked = [...(current === '' ? [] : [current]), ...ranked].slice(0, SELECT_LIMIT - 1)
+  const picked = [...(current === '' ? [] : [current]), ...ranked].slice(0, LABEL_LIMIT - 1)
 
   return [
-    { key: 'label:any', value: '', label: 'Any label' },
+    { key: 'label:any', value: '', label: 'Any' },
     ...picked.map(name => ({ key: `label:${name}`, value: name, label: name })),
   ]
 }
@@ -517,11 +531,19 @@ export function parseIssuesPage(stdout: string): IssuesPage {
   }
 }
 
-/** The milestone picker's options: any milestone, then each open one with its open issues, in order. */
-export function milestoneOptions(milestones: readonly MilestoneChoice[]): { key: string; value: string; label: string }[] {
+/**
+ * The milestone chips: any milestone, then each open one with its open issues, in
+ * order. A chip names a milestone by the part before ` · ` (`2 · Security` is `2`)
+ * where no other open milestone shares it, else by its whole title.
+ */
+export function milestoneChips(milestones: readonly MilestoneChoice[]): { key: string; value: string; label: string }[] {
+  const head = (title: string) => (title.includes(' · ') ? title.split(' · ')[0]! : title)
+  const name = (title: string) =>
+    milestones.filter(one => head(one.title) === head(title)).length === 1 ? head(title) : title
+
   return [
-    { key: 'milestone:any', value: '', label: 'Any milestone' },
-    ...milestones.map(one => ({ key: `milestone:${one.title}`, value: one.title, label: `${one.title} (${one.open})` })),
+    { key: 'milestone:any', value: '', label: 'Any' },
+    ...milestones.map(one => ({ key: `milestone:${one.title}`, value: one.title, label: `${name(one.title)} (${one.open})` })),
   ]
 }
 

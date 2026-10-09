@@ -45,8 +45,10 @@ import {
   paneBackground,
   issuesArgs,
   labelDot,
-  labelOptions,
-  milestoneOptions,
+  LABEL_CHIPS,
+  labelChips,
+  manifestVersion,
+  milestoneChips,
   labelPills,
   matchesQuery,
   meta,
@@ -117,6 +119,8 @@ const reading = atom({ plugin: 'github-issues', key: 'reading' } as const, null)
 const collapsed = atom({ plugin: 'github-issues', key: 'collapsed' } as const, false)
 // Whether the tabs, run filters, search and label picker show; folded away by default.
 const filtersOpen = atom({ plugin: 'github-issues', key: 'filtersOpen' } as const, false)
+// Whether the label row shows every label or only the first `LABEL_CHIPS`.
+const labelsAll = atom({ plugin: 'github-issues', key: 'labelsAll' } as const, false)
 
 type Gh = { ok: true; stdout: string } | { ok: false; message: string }
 
@@ -124,6 +128,8 @@ let ghPath: string | undefined
 let generation = 0
 let repoGeneration = 0
 let spinner: Timer | undefined
+// The mod's version from its plugin.json, shown in the header so a reload shows which one runs.
+let version: string | null = null
 const details = new Map<string, IssueDetail>()
 
 /**
@@ -668,6 +674,13 @@ export const register: Register = (on, options) => {
       argumentHint: '[owner/name | .]',
     })
     const started = await next(e)
+    void $.fs
+      .read(`${$.plugin.root}/.claude-plugin/plugin.json`)
+      .then(text => {
+        version = manifestVersion(text)
+        $.ui.invalidate('ui.render')
+      })
+      .catch(() => undefined)
     // Versions before 0.1.0's release pinned a status line; take down any left from them.
     $.ui.status(undefined)
 
@@ -762,7 +775,6 @@ export const register: Register = (on, options) => {
     const table = $.ui.resolve(e)
     const { Box, Button, Link, Markdown, Text } = table
     const Input = 'Input' in table ? table.Input : undefined
-    const Select = 'Select' in table ? table.Select : undefined
     // The terminal's table answers Svg with an element that draws nothing, so ask the surface.
     const Svg = e.surface !== 'terminal' && 'Svg' in table ? table.Svg : undefined
     // With a background set, the tree sits in a Box of that color filling the pane's body.
@@ -889,7 +901,11 @@ export const register: Register = (on, options) => {
       scope.label === '' ? '' : `label ${scope.label}`,
       (scope.milestone ?? '') === '' ? '' : `milestone ${scope.milestone}`,
     ].filter(Boolean)
-    const labelChoices = labelOptions(labels, list, scope.label)
+    const labelChoices = labelChips(labels, list, scope.label)
+    const isEveryLabelShown = await read($, labelsAll)
+    // Any and the first labels; the rest behind the +n button.
+    const shownLabels = isEveryLabelShown ? labelChoices : labelChoices.slice(0, LABEL_CHIPS + 1)
+    const hiddenLabels = labelChoices.length - shownLabels.length
     const areFiltersShown = await read($, filtersOpen)
     // What narrows the list beyond every open issue, said while the filters are folded away.
     const applied = [
@@ -953,6 +969,7 @@ export const register: Register = (on, options) => {
             )}
           </Box>
           <Box flexDirection="row" columnGap={2} flexShrink={0}>
+            {version !== null && <Text dimColor>{`v${version}`}</Text>}
             {shown !== null && (
               <Button key="open-repo" label="↗" plain onPress={() => void openInBrowser($, `https://github.com/${shown}`)} />
             )}
@@ -1020,23 +1037,40 @@ export const register: Register = (on, options) => {
                 onSubmit={text => void submitSearch($, text)}
               />
             )}
-            {Select !== undefined && labelChoices.length > 1 && (
-              <Select
-                key="label-filter"
-                label="Label"
-                value={scope.label}
-                options={labelChoices}
-                onSelect={value => void rescope($, { label: value })}
-              />
+            {/* Buttons, not a Select: a pick in the terminal's open Select was lost now and then. */}
+            {labelChoices.length > 1 && (
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                <Text dimColor>Label</Text>
+                {shownLabels.map(one => (
+                  <Button
+                    key={one.key}
+                    label={one.label}
+                    variant={one.value === scope.label ? 'primary' : 'secondary'}
+                    onPress={() => void rescope($, { label: one.value })}
+                  />
+                ))}
+                {labelChoices.length > LABEL_CHIPS + 1 && (
+                  <Button
+                    key="labels-all"
+                    label={isEveryLabelShown ? 'Fewer' : `+${hiddenLabels}`}
+                    plain
+                    onPress={() => void update($, labelsAll, isShown => !isShown)}
+                  />
+                )}
+              </Box>
             )}
-            {Select !== undefined && milestones.length > 0 && (
-              <Select
-                key="milestone-filter"
-                label="Milestone"
-                value={scope.milestone ?? ''}
-                options={milestoneOptions(milestones)}
-                onSelect={value => void rescope($, { milestone: value })}
-              />
+            {milestones.length > 0 && (
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                <Text dimColor>Milestone</Text>
+                {milestoneChips(milestones).map(one => (
+                  <Button
+                    key={one.key}
+                    label={one.label}
+                    variant={one.value === (scope.milestone ?? '') ? 'primary' : 'secondary'}
+                    onPress={() => void rescope($, { milestone: one.value })}
+                  />
+                ))}
+              </Box>
             )}
             {narrowing.length > 0 && (
               <Box flexDirection="row" columnGap={2}>

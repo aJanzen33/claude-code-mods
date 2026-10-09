@@ -25,8 +25,9 @@ import {
   issuesArgs,
   labelDot,
   labelInk,
-  labelOptions,
-  milestoneOptions,
+  labelChips,
+  manifestVersion,
+  milestoneChips,
   labelPills,
   matchesQuery,
   newlyAssigned,
@@ -349,7 +350,7 @@ describe('issues', () => {
       expect(await ui.findAll({ type: 'Button', text: 'Work on it' })).toHaveLength(2)
       const hasFields = surface !== 'mobile'
       expect(await ui.find({ key: 'issue-search' })).toEqual(hasFields ? expect.anything() : undefined)
-      expect(await ui.find({ key: 'label-filter' })).toEqual(hasFields ? expect.anything() : undefined)
+      expect(await ui.find({ key: 'label:any' })).toBeDefined()
       await ui.unmount()
     }
   })
@@ -461,20 +462,18 @@ describe('issues', () => {
     expect(await ui.find({ key: 'clear-all' })).toBeUndefined()
   })
 
-  test('the milestone picker lists the open milestones and narrows the search', async ($, on) => {
+  test('the milestone chips list the open milestones and narrow the search', async ($, on) => {
     const fake = fakeGitHub(on)
     await slashIssues($, '.')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await showFilters(ui)
 
-    const picker = await ui.find({ key: 'milestone-filter' })
-    expect(picker?.props.options).toEqual([
-      { value: '', label: 'Any milestone' },
-      { value: '1 · Groundwork', label: '1 · Groundwork (6)' },
-      { value: 'Later', label: 'Later (2)' },
-    ])
-    await ui.select({ key: 'milestone-filter', value: '1 · Groundwork' })
+    expect((await ui.find({ key: 'milestone:any' }))?.props).toMatchObject({ label: 'Any', variant: 'primary' })
+    expect((await ui.find({ key: 'milestone:1 · Groundwork' }))?.props).toMatchObject({ label: '1 (6)', variant: 'secondary' })
+    expect((await ui.find({ key: 'milestone:Later' }))?.props.label).toBe('Later (2)')
+    await ui.press({ key: 'milestone:1 · Groundwork' })
     expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open milestone:"1 · Groundwork" sort:created-desc')
+    expect((await ui.find({ key: 'milestone:1 · Groundwork' }))?.props.variant).toBe('primary')
 
     await ui.press({ key: 'toggle-filters' })
     expect(await ui.find({ type: 'Text', text: 'milestone 1 · Groundwork' })).toBeDefined()
@@ -536,7 +535,7 @@ describe('issues', () => {
       expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open crash sort:created-desc')
       expect(await ui.find({ type: 'Text', text: /^matching "crash"$/ })).toBeDefined()
 
-      await ui.select({ key: 'label-filter', value: 'bug' })
+      await ui.press({ key: 'label:bug' })
       expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open label:"bug" crash sort:created-desc')
       expect(await ui.find({ type: 'Text', text: 'matching "crash", label bug' })).toBeDefined()
 
@@ -547,17 +546,23 @@ describe('issues', () => {
     }
   })
 
-  test('a repository with more labels than a Select holds still draws, its used labels first', async ($, on) => {
+  test('a repository with many labels shows its used ones first, +n folds out the rest', async ($, on) => {
     const fake = fakeGitHub(on)
     fake.extraLabels = 170
     await slashIssues($, '.')
 
-    for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
+    for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
       const ui = await $.ui.mount({ ...PANE, surface })
       await showFilters(ui)
-      const options = (await ui.find({ key: 'label-filter' }))?.props.options as { value: string }[]
-      expect(options).toHaveLength(64)
-      expect(options.slice(0, 2).map(option => option.value)).toEqual(['', 'bug'])
+      const chips = async () =>
+        (await ui.findAll({ type: 'Button' })).map(button => String(button.props.key)).filter(key => key.startsWith('label:'))
+      expect(await chips()).toHaveLength(9)
+      expect((await chips()).slice(0, 2)).toEqual(['label:any', 'label:bug'])
+      expect((await ui.find({ key: 'labels-all' }))?.props.label).toBe('+55')
+      await ui.press({ key: 'labels-all' })
+      expect(await chips()).toHaveLength(64)
+      await ui.press({ key: 'labels-all' })
+      expect(await chips()).toHaveLength(9)
       await ui.unmount()
     }
   })
@@ -1168,13 +1173,19 @@ describe('lib', () => {
     expect(page.labels.map(one => one.name)).toEqual(['bug', 'ui'])
   })
 
-  test('labelOptions: Any, the chosen one, the most used, then by name, 64 at most', () => {
+  test('manifestVersion reads the version a plugin.json states', () => {
+    expect(manifestVersion('{ "name": "github-issues", "version": "0.16.0" }')).toBe('0.16.0')
+    expect(manifestVersion('{ "name": "github-issues" }')).toBeNull()
+    expect(manifestVersion('not json')).toBeNull()
+  })
+
+  test('labelChips: Any, the chosen one, the most used, then by name, 64 at most', () => {
     const many = Array.from({ length: 100 }, (_, index) => ({ name: `l${String(index).padStart(3, '0')}`, color: '' }))
     const used = [{ labels: [{ name: 'l050', color: '' }] }, { labels: [{ name: 'l050', color: '' }, { name: 'l070', color: '' }] }]
-    const options = labelOptions(many, used, 'l099')
+    const options = labelChips(many, used, 'l099')
     expect(options).toHaveLength(64)
     expect(options.slice(0, 5).map(option => option.value)).toEqual(['', 'l099', 'l050', 'l070', 'l000'])
-    expect(labelOptions([], [], '')).toEqual([{ key: 'label:any', value: '', label: 'Any label' }])
+    expect(labelChips([], [], '')).toEqual([{ key: 'label:any', value: '', label: 'Any' }])
   })
 
   test('labelPills: 11px text on tinted pills in one SVG, wrapped, ink for light and dark panes', () => {
@@ -1308,8 +1319,16 @@ describe('lib', () => {
     expect(fitThread(thread).cut).toBe(0)
   })
 
-  test('milestoneOptions offers any milestone, then each with its open issues', () => {
-    expect(milestoneOptions([])).toEqual([{ key: 'milestone:any', value: '', label: 'Any milestone' }])
+  test('milestoneChips names a milestone by its head where no other shares it', () => {
+    expect(milestoneChips([])).toEqual([{ key: 'milestone:any', value: '', label: 'Any' }])
+    expect(
+      milestoneChips([
+        { title: '1 · Groundwork', open: 0 },
+        { title: '2 · Security: the base app', open: 7 },
+        { title: '2 · Security: audit', open: 3 },
+        { title: 'Later · Going public', open: 2 },
+      ]).map(one => one.label),
+    ).toEqual(['Any', '1 (0)', '2 · Security: the base app (7)', '2 · Security: audit (3)', 'Later (2)'])
     expect(searchQuery('a/b', 'open', '', '', [], 'number-desc', 'Say "hi"')).toBe(
       'repo:a/b is:issue is:open milestone:"Say hi" sort:created-desc',
     )

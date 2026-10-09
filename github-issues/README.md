@@ -12,7 +12,7 @@ A side pane in Claude Code that lists a repository's GitHub issues as cards.
 **[Watch the demo on X](https://x.com/marcocarne_/status/2107456270873796697)**
 
 - **Tabs:** Open, Assigned (with your count), Created, Closed
-- **Search and labels:** a search box (Enter runs a GitHub search) and a label picker. **Clear** resets both.
+- **Search and labels:** a search box (Enter runs a GitHub search) and a row of label buttons: **Any**, then the labels the listed issues use most. **+n** shows the rest, up to 64 in all, and **Fewer** hides them again. **Clear** resets search and label.
 - **Cards:** title, `#number` (opens the issue on GitHub), assignees, last update, comment count, linked pull request (open, draft, merged or closed), and labels as small pills in GitHub's colors
 - **Details:** shows the issue's description inside its card
 - **Work on it:** sends Claude a prompt to read the issue and its comments, plan, and implement it. Its card gets an accent border.
@@ -34,7 +34,7 @@ A `/clear` leaves the pane as it was: the list, the opened card, the reader and 
 
 ## The header
 
-One row: the repository and how many issues are loaded, then **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh), **⇥** and **Filter ▸**. **⇥** closes the list and the reader so the conversation gets the whole width; while they are away, one row above the prompt says `⇤ Issues · <repository> · <count>`, and a press on it brings the list back (so does `/issues`). The filters (tabs, run filters, search, label and milestone) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).
+One row: the repository and how many issues are loaded, then the mod's version (`v0.16.0`, so a reload shows which one runs), **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh), **⇥** and **Filter ▸**. **⇥** closes the list and the reader so the conversation gets the whole width; while they are away, one row above the prompt says `⇤ Issues · <repository> · <count>`, and a press on it brings the list back (so does `/issues`). The filters (tabs, run filters, search, label and milestone) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).
 
 ## The list
 
@@ -60,7 +60,7 @@ The button beside **Refresh** steps through the list's order: `#↓` by number, 
 
 ## Milestones
 
-The **Milestone** picker among the filters lists the repository's open milestones in their order, each with its open issues (`1 · Groundwork (6)`), and narrows the list to one.
+The **Milestone** row among the filters has a button for each of the repository's open milestones, in their order, with its open issues, and one press narrows the list to it; **Any** goes back to all. A button names its milestone by the part before ` · ` (`1 · Groundwork` is `1 (6)`) unless another open milestone shares that part; the line under the filters then gives the whole title.
 
 ## Run filters
 
