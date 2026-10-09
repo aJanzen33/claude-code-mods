@@ -72,8 +72,6 @@ const PANE = 'github-issues'
 const READER = 'github-issue'
 const TITLE = 'Issues'
 const REFRESH_MS = 2 * 60_000
-// The width ⇥ asks for: the number and the start of a title. A width the person dragged wins.
-const NARROW_COLUMNS = 24
 const GH_PATHS = ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
 const CMUX_PATHS = ['cmux', '/Applications/cmux.app/Contents/Resources/bin/cmux']
 // The default browser's openers, tried in turn: macOS, Linux, Windows.
@@ -115,8 +113,8 @@ const searchDraft = atom({ plugin: 'github-issues', key: 'searchDraft' } as cons
 const open = atom({ plugin: 'github-issues', key: 'open' } as const, null)
 const active = atom({ plugin: 'github-issues', key: 'active' } as const, null)
 const reading = atom({ plugin: 'github-issues', key: 'reading' } as const, null)
-// Whether the pane is folded to a slim strip of numbers and titles.
-const narrow = atom({ plugin: 'github-issues', key: 'narrow' } as const, false)
+// Whether ⇥ closed the panes for the conversation's sake; a row above the prompt brings them back.
+const collapsed = atom({ plugin: 'github-issues', key: 'collapsed' } as const, false)
 // Whether the tabs, run filters, search and label picker show; folded away by default.
 const filtersOpen = atom({ plugin: 'github-issues', key: 'filtersOpen' } as const, false)
 
@@ -445,16 +443,21 @@ async function isOpen($: EngineInterface): Promise<boolean> {
 }
 
 async function openPane($: EngineInterface): Promise<void> {
-  // Every open sets the width anew: folded asks for the slim strip, else Claude Code's share.
-  const isNarrow = await read($, narrow)
-  await $.ui.open({ id: PANE, title: TITLE, ...(isNarrow ? { columns: NARROW_COLUMNS } : {}) })
+  await update($, collapsed, () => false)
+  await $.ui.open({ id: PANE, title: TITLE })
   await $.store.set('isOpen', true)
 }
 
-/** Folds the pane to a slim strip, or back to its full width. */
-async function toggleNarrow($: EngineInterface): Promise<void> {
-  await update($, narrow, isNarrow => !isNarrow)
+/** Closes the list and the reader so the conversation gets the whole width; the row above the prompt reopens them. */
+async function collapse($: EngineInterface): Promise<void> {
+  await update($, collapsed, () => true)
+  await $.ui.close({ id: READER })
+  await $.ui.close({ id: PANE })
+}
+
+async function expand($: EngineInterface): Promise<void> {
   await openPane($)
+  await refresh($, true)
 }
 
 /** Opens `number` of the listed repository in the reader pane, a tab beside the list, and loads it whole. */
@@ -665,6 +668,25 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || !(await read($, collapsed))) return next(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const { repo, issues, total, scope } = await read($, page)
+    const noun = FILTERS.find(one => one.id === scope.filter)?.noun ?? scope.filter
+    const counted = `${total > issues.length ? `${issues.length} of ${total}` : issues.length} ${noun}`
+
+    return (
+      <Box flexDirection="row" columnGap={1}>
+        <Button key="expand" label="⇤ Issues" plain onPress={() => void expand($)} />
+        {repo !== null && (
+          <Text dimColor wrap="truncate-end">
+            {`· ${repo.split('/')[1] ?? repo} · ${counted}`}
+          </Text>
+        )}
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const table = $.ui.resolve(e)
     const { Box, Button, Link, Markdown, Text } = table
@@ -697,36 +719,6 @@ export const register: Register = (on, options) => {
         <Text dimColor>{text}</Text>
       </Box>
     )
-
-    if (await read($, narrow)) {
-      const { repo, issues } = await read($, page)
-      const handedOver = await read($, active)
-      const width = Math.max(10, e.props.bodyColumns)
-
-      return paint(
-        <Box flexDirection="column" width={width}>
-          <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
-            <Text bold wrap="truncate-end">
-              {repo === null ? TITLE : (repo.split('/')[1] ?? repo)}
-            </Text>
-            <Button key="widen" label="⇤" plain onPress={() => void toggleNarrow($)} />
-          </Box>
-          {issues.map(issue => {
-            const isWorking = handedOver?.number === issue.number
-            const tint = runColor(issue)
-
-            return (
-              <Box key={`slim:${issue.number}`} flexDirection="row" columnGap={1}>
-                <Text bold {...(isWorking ? { color: 'claude' } : tint === null ? {} : { color: tint })}>
-                  {`#${issue.number}`}
-                </Text>
-                <Text wrap="truncate-end">{splitSeries(issue.title).rest}</Text>
-              </Box>
-            )
-          })}
-        </Box>,
-      )
-    }
 
     if ((await read($, view)) === 'repos') {
       const { here, repos: choices, load: status } = await read($, picker)
@@ -901,7 +893,7 @@ export const register: Register = (on, options) => {
               onPress={() => void rescope($, { sort: nextSort(scope.sort ?? 'number-desc') })}
             />
             <Button key="refresh" label="↻" plain onPress={() => void rescope($, {})} />
-            <Button key="narrow" label="⇥" plain onPress={() => void toggleNarrow($)} />
+            <Button key="collapse" label="⇥" plain onPress={() => void collapse($)} />
             <Button
               key="toggle-filters"
               label={areFiltersShown ? 'Filter ▾' : applied.length > 0 ? `Filter ▸ ${applied.length}` : 'Filter ▸'}

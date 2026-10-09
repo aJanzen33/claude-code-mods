@@ -1,6 +1,6 @@
 {
   "name": "github-issues",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "A side pane listing the repository's GitHub issues, with one click to have Claude work on one",
   "author": { "name": "Marco Carnevali", "url": "https://github.com/MarcoCarnevali" },
   "repository": "https://github.com/MarcoCarnevali/claude-code-mods",

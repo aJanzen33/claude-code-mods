@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, RenderElement } from 'claude-code'
 
 import {
   SPINNER_SVG,
@@ -197,6 +197,8 @@ type Fake = {
   panes: string[]
   // The width each open asked for; null for Claude Code's share.
   widths: (number | null)[]
+  // The id of every pane closed.
+  closed: string[]
 }
 
 /** Fakes the surface, the session's git remote and the `gh` CLI. */
@@ -221,6 +223,7 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     opened: [],
     panes: [],
     widths: [],
+    closed: [],
   }
 
   mock.store(on)
@@ -229,6 +232,12 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     fake.widths.push(e.columns ?? null)
 
     return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($, e) => {
+    fake.closed.push(e.id)
+    if (e.id === 'github-issues') fake.isPaneOpen = false
+
+    return { value: undefined }
   })
   on('ui.panes', () => ({
     value: fake.isPaneOpen
@@ -473,23 +482,32 @@ describe('issues', () => {
     expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
   })
 
-  test('⇥ folds the pane to a slim strip of numbers and titles, ⇤ widens it again', async ($, on) => {
+  test('⇥ closes the panes for the conversation; the row above the prompt brings them back', async ($, on) => {
     const fake = fakeGitHub(on)
+    // Claude Code's own row above the prompt, drawn while the mod passes: nothing.
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+      const { Box } = $.ui.resolve(e)
+
+      return h(Box, {}) as RenderElement
+    })
     await slashIssues($, '.')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const band = await $.ui.mount({
+      plugin: 'github-issues',
+      surface: 'terminal',
+      component: 'AbovePrompt',
+      props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+    })
+    expect(await band.find({ key: 'expand' })).toBeUndefined()
 
-    await ui.press({ key: 'narrow' })
-    expect(fake.widths.at(-1)).toBe(24)
-    expect(await ui.find({ key: 'toggle-filters' })).toBeUndefined()
-    expect(await ui.find({ key: 'slim:42' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'Crash on launch' })).toBeDefined()
+    await ui.press({ key: 'collapse' })
+    expect(fake.closed).toEqual(['github-issue', 'github-issues'])
+    expect((await band.find({ key: 'expand' }))?.text).toBe('⇤ Issues')
+    expect(await band.find({ type: 'Text', text: '· widgets · 2 open' })).toBeDefined()
 
-    await slashIssues($, '.')
-    expect(fake.widths.at(-1)).toBe(24)
-
-    await ui.press({ key: 'widen' })
-    expect(fake.widths.at(-1)).toBeNull()
-    expect(await ui.find({ key: 'toggle-filters' })).toBeDefined()
+    await band.press({ key: 'expand' })
+    expect(fake.panes.at(-1)).toBe('github-issues')
+    expect(await band.find({ key: 'expand' })).toBeUndefined()
   })
 
   test('tabs search for the matching issues', async ($, on) => {
