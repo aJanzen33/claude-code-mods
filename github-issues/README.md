@@ -30,6 +30,8 @@ The pane shows the 40 most recently updated issues that match. A spinner shows w
 
 In the picker, repositories are grouped by owner. Type in the filter box to narrow the list. Enter opens the first match, or any `owner/name` you type. **Switch repo** in the pane goes back to the picker. If the session isn't in a GitHub repository, the pane opens on the picker.
 
+A `/clear` leaves the pane as it was: the list, the opened card, the reader and the filters stay, and the list is brought up to date in the background.
+
 ## The header
 
 One row: the repository and how many issues are loaded, then **↗** (the repository on GitHub), **Repos** (the picker), the sort, **↻** (refresh), **⇥** and **Filter ▸**. **⇥** closes the list and the reader so the conversation gets the whole width; while they are away, one row above the prompt says `⇤ Issues · <repository> · <count>`, and a press on it brings the list back (so does `/issues`). The filters (tabs, run filters, search, label and milestone) fold away under **Filter ▸**; folded, a line names what narrows the list, with **Clear** to go back to every open issue, and the button counts it (`Filter ▸ 2`).

@@ -13,7 +13,7 @@
       "name": "github-issues",
       "source": "./github-issues",
       "description": "A side pane listing the repository's GitHub issues, with one click to have Claude work on one",
-      "version": "0.15.0",
+      "version": "0.15.1",
       "category": "productivity",
       "keywords": ["mod", "github", "issues", "pane"]
     },

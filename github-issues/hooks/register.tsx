@@ -442,6 +442,58 @@ async function isOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE)
 }
 
+// The store key holding the pane's values between a /clear and the session after it.
+const CARRIED = 'carried'
+
+/** What a /clear would reset and the person would miss: the list as shown, the card opened, the reader, the folds. Not `active`: the work it marked ended with the conversation. */
+type Carried = {
+  view: IssueView
+  pinned: string | null
+  page: IssuesPane
+  searchDraft: string
+  open: OpenIssue | null
+  reading: ReaderIssue | null
+  collapsed: boolean
+  filtersOpen: boolean
+}
+
+function isCarried(value: unknown): value is Carried {
+  return typeof value === 'object' && value !== null && 'page' in value && 'view' in value
+}
+
+/** Writes the pane's values to the store, for `restore` in the session that follows a /clear. */
+async function carry($: EngineInterface): Promise<void> {
+  const carried: Carried = {
+    view: await read($, view),
+    pinned: await read($, pinned),
+    page: await read($, page),
+    searchDraft: await read($, searchDraft),
+    open: await read($, open),
+    reading: await read($, reading),
+    collapsed: await read($, collapsed),
+    filtersOpen: await read($, filtersOpen),
+  }
+  await $.store.set(CARRIED, carried)
+}
+
+/** Puts the carried values back and takes them off the store; false when there was nothing carried. */
+async function restore($: EngineInterface): Promise<boolean> {
+  const carried = await $.store.get(CARRIED)
+  if (carried === undefined) return false
+  await $.store.delete(CARRIED)
+  if (!isCarried(carried)) return false
+  await setView($, carried.view)
+  await setPinned($, carried.pinned)
+  await setPage($, carried.page)
+  await setSearchDraft($, carried.searchDraft)
+  await setOpen($, carried.open)
+  await update($, reading, () => carried.reading)
+  await update($, collapsed, () => carried.collapsed)
+  await update($, filtersOpen, () => carried.filtersOpen)
+
+  return true
+}
+
 async function openPane($: EngineInterface): Promise<void> {
   await update($, collapsed, () => false)
   await $.ui.open({ id: PANE, title: TITLE })
@@ -657,6 +709,25 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined && (await isOpen($))) void refresh($, true)
+
+    return done
+  })
+
+  // A /clear ends the session: its values go, the store stays. Carry the pane's over before they do.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') await carry($)
+
+    return next(e)
+  })
+
+  // The fresh session after a /clear gets no session.start; put the carried values back and bring the list up to date.
+  on('classic.SessionStart', async ($, e, next) => {
+    const done = await next(e)
+    if (e.source !== 'clear') return done
+    void (async () => {
+      const isRestored = await restore($)
+      if (await isOpen($)) await refresh($, isRestored)
+    })()
 
     return done
   })

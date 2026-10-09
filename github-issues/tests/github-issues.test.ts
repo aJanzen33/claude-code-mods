@@ -640,6 +640,54 @@ describe('issues', () => {
     expect((await ui.find({ key: 'filter:assigned' }))?.text).toBe('Assigned · 2')
   })
 
+  test('a /clear keeps the pane as it was: the opened card, the filters shown, the list brought up to date', async ($, on) => {
+    const fake = fakeGitHub(on)
+    on('classic.SessionStart', () => ({}))
+    on('session.end', () => ({ sessionId: 'after' }))
+    // The session's values the engine holds: `wipe` forgets every one seen, the way a /clear starts a session over.
+    const name = (e: { plugin: string; key: string; id?: string }) => `${e.plugin}/${e.key}/${e.id ?? ''}`
+    const seen = new Set<string>()
+    const wiped = new Set<string>()
+    on('state.get', ($, e, next) => {
+      seen.add(name(e))
+      if (wiped.has(name(e))) return { value: { value: undefined, version: 0 } }
+
+      return next(e)
+    })
+    on('state.set', ($, e, next) => {
+      seen.add(name(e))
+      if (!wiped.delete(name(e))) return next(e)
+
+      return next({ ...e, ifVersion: undefined })
+    })
+    const wipe = () => {
+      for (const one of seen) wiped.add(one)
+    }
+
+    await slashIssues($, '.')
+    expect(fake.searches).toHaveLength(1)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await showFilters(ui)
+    await ui.press({ key: 'details:42' })
+    expect(await ui.find({ key: 'body:42' })).toBeDefined()
+    expect(await ui.find({ key: 'filter:open' })).toBeDefined()
+
+    // Another session start is not a /clear: nothing happens.
+    await $.classic.SessionStart({ source: 'startup' })
+    await fake.clock.settle()
+    expect(fake.searches).toHaveLength(1)
+
+    await $.session.end({ reason: 'clear', sessionId: 'before', resume: { id: 'before' } })
+    wipe()
+
+    await $.classic.SessionStart({ source: 'clear' })
+    await fake.clock.settle()
+    expect(await ui.find({ key: 'body:42' })).toBeDefined()
+    expect(await ui.find({ key: 'filter:open' })).toBeDefined()
+    expect(fake.searches).toHaveLength(2)
+    await ui.unmount()
+  })
+
   test('a background refresh keeps the list when gh fails; a pressed Refresh shows the error', async ($, on) => {
     const fake = fakeGitHub(on)
     on('command.register', () => ({ value: { command: 'issues' } }))
