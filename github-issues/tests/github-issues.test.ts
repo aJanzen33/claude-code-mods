@@ -25,6 +25,7 @@ import {
   issuesArgs,
   labelDot,
   labelInk,
+  keptScope,
   labelChips,
   manifestVersion,
   milestoneChips,
@@ -203,7 +204,11 @@ type Fake = {
 }
 
 /** Fakes the surface, the session's git remote and the `gh` CLI. */
-function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets.git'): Fake {
+function fakeGitHub(
+  on: On,
+  remote: string | null = 'git@github.com:acme/widgets.git',
+  stored: Readonly<Record<string, unknown>> = {},
+): Fake {
   const fake: Fake = {
     clock: mock.clock(on, { now: NOW }),
     calls: [],
@@ -227,7 +232,7 @@ function fakeGitHub(on: On, remote: string | null = 'git@github.com:acme/widgets
     closed: [],
   }
 
-  mock.store(on)
+  mock.store(on, stored)
   on('ui.open', ($, e) => {
     fake.panes.push(e.id)
     fake.widths.push(e.columns ?? null)
@@ -456,10 +461,9 @@ describe('issues', () => {
     expect(await ui.find({ key: 'filter:open' })).toBeUndefined()
     expect((await ui.find({ key: 'toggle-filters' }))?.text).toBe('Filter ▸ 2')
     expect(await ui.find({ type: 'Text', text: 'Assigned · Plan' })).toBeDefined()
-
-    await ui.press({ key: 'clear-all' })
-    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
+    // Clear drops a search alone; with none, the line has no Clear.
     expect(await ui.find({ key: 'clear-all' })).toBeUndefined()
+    expect(fake.searches).toHaveLength(3)
   })
 
   test('the milestone chips list the open milestones and narrow the search', async ($, on) => {
@@ -477,8 +481,28 @@ describe('issues', () => {
 
     await ui.press({ key: 'toggle-filters' })
     expect(await ui.find({ type: 'Text', text: 'milestone 1 · Groundwork' })).toBeDefined()
-    await ui.press({ key: 'clear-all' })
+    await ui.press({ key: 'toggle-filters' })
+    await ui.press({ key: 'milestone:any' })
     expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
+  })
+
+  test('a repository keeps its filters across sessions, all but the search', async ($, on) => {
+    const kept = { filter: 'closed', run: '', label: 'bug', milestone: 'Later', sort: 'number-asc' }
+    const fake = fakeGitHub(on, undefined, { 'scope:acme/widgets': kept })
+    await slashIssues($, '.')
+    expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed label:"bug" milestone:"Later" sort:created-asc')
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await showFilters(ui)
+    await ui.press({ key: 'milestone:1 · Groundwork' })
+    await ui.input({ key: 'issue-search', text: 'crash' })
+
+    // Away to another repository and back: its filters come from the store, the search does not.
+    await slashIssues($, 'other/thing')
+    await slashIssues($, '.')
+    expect(fake.searches.at(-1)).toBe(
+      'repo:acme/widgets is:issue is:closed label:"bug" milestone:"1 · Groundwork" sort:created-asc',
+    )
   })
 
   test('⇥ closes the panes for the conversation; the row above the prompt brings them back', async ($, on) => {
@@ -524,7 +548,7 @@ describe('issues', () => {
     expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:closed sort:created-desc')
   })
 
-  test('the search box and the label picker narrow the list; Clear resets both', async ($, on) => {
+  test('the search box and the label buttons narrow the list; Clear drops the search alone', async ($, on) => {
     const fake = fakeGitHub(on)
     await slashIssues($, '.')
 
@@ -540,8 +564,10 @@ describe('issues', () => {
       expect(await ui.find({ type: 'Text', text: 'matching "crash", label bug' })).toBeDefined()
 
       await ui.press({ key: 'clear-filters' })
-      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
+      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open label:"bug" sort:created-desc')
       expect(await ui.find({ key: 'clear-filters' })).toBeUndefined()
+      await ui.press({ key: 'label:any' })
+      expect(fake.searches.at(-1)).toBe('repo:acme/widgets is:issue is:open sort:created-desc')
       await ui.unmount()
     }
   })
@@ -1171,6 +1197,18 @@ describe('lib', () => {
       issues: [{ number: 42, title: 'Crash on launch', url: 'https://github.com/acme/widgets/issues/42' }],
     })
     expect(page.labels.map(one => one.name)).toEqual(['bug', 'ui'])
+  })
+
+  test('keptScope checks what the store kept and fills the gaps', () => {
+    expect(keptScope(undefined)).toBeNull()
+    expect(keptScope({ filter: 'closed', milestone: 'Later', sort: 'updated-desc' })).toEqual({
+      filter: 'closed',
+      run: '',
+      label: '',
+      milestone: 'Later',
+      sort: 'updated-desc',
+    })
+    expect(keptScope({ filter: 'nonsense', sort: 7, label: 3 })).toEqual({ filter: 'open', run: '', label: '', milestone: '', sort: 'number-desc' })
   })
 
   test('manifestVersion reads the version a plugin.json states', () => {

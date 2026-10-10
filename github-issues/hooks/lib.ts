@@ -1,4 +1,4 @@
-import type { Issue, IssueComment, IssueDetail, IssueFilter, IssueLabel, IssueSort, IssueThread, LinkedPr, MilestoneChoice, RepoChoice, RunGroup } from '../types'
+import type { Issue, IssueComment, IssueDetail, IssueFilter, IssueLabel, IssueScope, IssueSort, IssueThread, LinkedPr, MilestoneChoice, RepoChoice, RunGroup } from '../types'
 
 export const LIMIT = 40
 export const REPO_LIMIT = 30
@@ -346,6 +346,24 @@ export const SPINNER_SVG =
   '@media(prefers-color-scheme:dark){.t{stroke:#3d444d}.a{stroke:#9198a1}}' +
   '@keyframes s{to{transform:rotate(360deg)}}</style>' +
   '<circle class="t" cx="7" cy="7" r="5.5"/><circle class="a" cx="7" cy="7" r="5.5"/></svg>'
+
+/** A repository's filters as the store keeps them across sessions: its scope but the search. */
+export type KeptScope = Omit<IssueScope, 'search'>
+
+/** What the store kept for a repository, each field checked, or null where it kept nothing. */
+export function keptScope(raw: unknown): KeptScope | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const kept = raw as Record<string, unknown>
+  const text = (value: unknown) => (typeof value === 'string' ? value : '')
+
+  return {
+    filter: FILTERS.find(one => one.id === kept.filter)?.id ?? 'open',
+    run: text(kept.run),
+    label: text(kept.label),
+    milestone: text(kept.milestone),
+    sort: SORTS.find(one => one.id === kept.sort)?.id ?? 'number-desc',
+  }
+}
 
 /** The `version` a plugin.json states, or null. */
 export function manifestVersion(text: string): string | null {

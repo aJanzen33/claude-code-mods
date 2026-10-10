@@ -46,6 +46,7 @@ import {
   issuesArgs,
   labelDot,
   LABEL_CHIPS,
+  keptScope,
   labelChips,
   manifestVersion,
   milestoneChips,
@@ -274,8 +275,12 @@ async function loadIssues($: EngineInterface, isQuiet: boolean): Promise<void> {
 
   const before = await read($, page)
   const isNewRepo = before.repo !== target
+  // A repository's own filters where the store kept them, else the tab, run filter and order of the one before.
+  const kept = isNewRepo ? keptScope(await $.store.get(scopeKey(target))) : null
+  if (mine !== generation) return
+  const carried = { filter: before.scope.filter, run: before.scope.run ?? '', sort: before.scope.sort ?? 'number-desc' }
   let current: IssuesPane = isNewRepo
-    ? { ...EMPTY_PAGE, repo: target, scope: { ...EMPTY_PAGE.scope, filter: before.scope.filter, run: before.scope.run ?? '', sort: before.scope.sort ?? 'number-desc' } }
+    ? { ...EMPTY_PAGE, repo: target, scope: { ...EMPTY_PAGE.scope, ...(kept ?? carried) } }
     : before
   if (isNewRepo) {
     await setOpen($, null)
@@ -355,11 +360,24 @@ async function tick($: EngineInterface): Promise<void> {
   else await checkAssigned($)
 }
 
-/** Narrows the list: the new scope and the spinner in one write, the results in the next. */
+/** Where the store keeps `repo`'s filters across sessions. */
+function scopeKey(repo: string): string {
+  return `scope:${repo}`
+}
+
+/**
+ * Narrows the list: the new scope and the spinner in one write, the results in
+ * the next. The store keeps the repository's filters, all but the search.
+ */
 async function rescope($: EngineInterface, change: Partial<IssuesPane['scope']>): Promise<void> {
   await setOpen($, null)
   const current = await read($, page)
-  await setPage($, { ...current, scope: { ...current.scope, ...change }, load: { kind: 'loading' } })
+  const scope = { ...current.scope, ...change }
+  await setPage($, { ...current, scope, load: { kind: 'loading' } })
+  if (current.repo !== null) {
+    const { filter, run, label, milestone, sort } = scope
+    await $.store.set(scopeKey(current.repo), { filter, run, label, milestone, sort })
+  }
   await refresh($)
 }
 
@@ -368,15 +386,10 @@ async function submitSearch($: EngineInterface, text: string): Promise<void> {
   await rescope($, { search: text.trim() })
 }
 
-/** Back to every open issue: no tab but Open, no run filter, search or label. */
-async function clearAll($: EngineInterface): Promise<void> {
-  await setSearchDraft($, '')
-  await rescope($, { filter: 'open', run: '', search: '', label: '', milestone: '' })
-}
-
+/** Drops the search alone: the tab, run filter, label and milestone stay, as the store keeps them. */
 async function clearSearch($: EngineInterface): Promise<void> {
   await setSearchDraft($, '')
-  await rescope($, { search: '', label: '', milestone: '' })
+  await rescope($, { search: '' })
 }
 
 /** Switches the pane to the repository picker and loads its choices. */
@@ -1000,7 +1013,7 @@ export const register: Register = (on, options) => {
             <Text dimColor wrap="truncate-end">
               {applied.join(' · ')}
             </Text>
-            <Button key="clear-all" label="Clear" plain onPress={() => void clearAll($)} />
+            {scope.search !== '' && <Button key="clear-all" label="Clear" plain onPress={() => void clearSearch($)} />}
           </Box>
         )}
         {areFiltersShown && (
@@ -1077,7 +1090,9 @@ export const register: Register = (on, options) => {
                 <Text dimColor wrap="truncate-end">
                   {narrowing.join(', ')}
                 </Text>
-                <Button key="clear-filters" label="Clear" plain onPress={() => void clearSearch($)} />
+                {scope.search !== '' && (
+                  <Button key="clear-filters" label="Clear" plain onPress={() => void clearSearch($)} />
+                )}
               </Box>
             )}
           </Box>
